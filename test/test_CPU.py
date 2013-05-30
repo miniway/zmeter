@@ -15,8 +15,8 @@ class test_CpuInfo(unittest.TestCase):
         zm = ZMeter()
         info = zm.fetch('cpu')
         
-        self.assertTrue(info.has_key('cpu.all.usr'))
-        self.assertTrue(info.get('cpu.all.idle') > 0)
+        self.assertTrue(info.has_key('all.usr'))
+        self.assertEquals(info.get('all.idle') , 100.0 - info.get('all.used'))
 
     def testSendCpuInfo(self):
 
@@ -33,11 +33,12 @@ class test_CpuInfo(unittest.TestCase):
         header = sock.recv(0)
         body = sock.recv(0)
 
+        header = json.loads(header)
         info = json.loads(body)
-        print info
         
-        self.assertTrue(info.has_key('cpu.all.usr'))
-        self.assertTrue(info.get('cpu.all.idle') > 0)
+        self.assertEquals(header.get('kind'),'cpu')
+        self.assertTrue(info.has_key('all.usr'))
+        self.assertEquals(info.get('all.idle') , 100.0 - info.get('all.used'))
 
         sock.close()
         ctx.term()

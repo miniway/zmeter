@@ -32,6 +32,7 @@ class ZMeter(object):
         self.logger.addHandler(log_handler)
 
     def loadPlugins(self):
+        platform = self.platform()
         plugin_dir = []
         plugin_dir.append(os.path.join(os.path.dirname(__file__), 'plugins'))
         for path in plugin_dir:
@@ -47,7 +48,7 @@ class ZMeter(object):
                     mod = getattr(loaded_module, comp) 
                     if type(mod) == type and issubclass(mod, Metric):
                         inst = mod()
-                        inst.init(logger = self.logger)
+                        inst.init(platform, self.logger)
                         self.__plugins[name] = inst
  
     def loadZMQ(self, endpoints, hwm):
@@ -68,7 +69,7 @@ class ZMeter(object):
         return inst and inst.fetch() or None
 
     def send(self, name):
-        frames = self.__serializer.feed(self.fetch(name))
+        frames = self.__serializer.feed(name, self.fetch(name))
         for frame in frames[:-1]:
             self.__inbox.send(frame, zmq.SNDMORE)
         self.__inbox.send(frames[-1])
@@ -76,36 +77,7 @@ class ZMeter(object):
     def close(self):
         self.__inbox.close()
         self.__ctx.term()
-
-class Serializer(object):
-    def __init__(self):
-        pass
-
-    def header(self):
-        ts_millis = long(time.time() * 1000)
-        return {
-            'ts'    : ts_millis,
-            'host'  : platform.node(),
-        }
-
-class JsonSerializer(Serializer):
-    def __init__(self):
-        super(JsonSerializer, self).__init__()
-        pass
-
-    def feed(self, body):
-        import json
-        return [json.dumps(self.header()), json.dumps(body)]
-
-
-class Metric(object):
-
-    def __init__(self):
-        self._logger = None
-
-    def init(self, logger):
-        self._logger = logger
-
+        
     def platform(self):
         pf = {'machine'     : platform.machine(), 
               'processor'   : platform.processor(), 
@@ -114,7 +86,40 @@ class Metric(object):
 
         if pf['system'] in ['Linux']:
             pf['dist'] = platform.linux_distribution()
+
         return pf
+
+
+class Serializer(object):
+    def __init__(self):
+        pass
+
+    def header(self, name):
+        ts_millis = long(time.time() * 1000)
+        return {
+            'ts'    : ts_millis,
+            'host'  : platform.node(),
+            'kind'  : name,
+        }
+
+class JsonSerializer(Serializer):
+    def __init__(self):
+        super(JsonSerializer, self).__init__()
+        pass
+
+    def feed(self, name, body):
+        import json
+        return [json.dumps(self.header(name)), json.dumps(body)]
+
+
+class Metric(object):
+
+    def __init__(self):
+        self._logger = None
+
+    def init(self, platform, logger):
+        self._platform = platform
+        self._logger = logger
 
     def fetch(self):
         raise Exception("Must Override fetch")

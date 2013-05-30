@@ -9,12 +9,11 @@ class Cpu(zmeter.Metric):
         super(Cpu, self).__init__()
         self.__cores = []
         self.__parseCpuInfo()
-        self.__system = self.platform()['system']
         self.__re_header = re.compile(r'%(\w+)')
         self.__re_value = re.compile(r'\d+\.\d+')
 
     def fetch(self):
-        if self.__system == 'Linux':
+        if self._platform['system'] == 'Linux':
             return self.__fetchLinuxStat()
         pass
 
@@ -51,7 +50,8 @@ class Cpu(zmeter.Metric):
             else:
                 cpu = line[pos: line.find(' ', pos+3)].strip()
                 values = re.findall(self.__re_value, line)
-                stat = dict(map(lambda k,v: ('cpu.%s.%s' % (cpu, k), float(v)), names, values))
+                stat = dict(map(lambda k,v: ('%s.%s' % (cpu, k), float(v)), names, values))
+                stat['%s.used' % cpu ] = 100.0 - stat['%s.idle' % cpu]
                 stats.update(stat)
 
         return stats
