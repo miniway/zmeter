@@ -12,10 +12,14 @@ class Cpu(zmeter.Metric):
         self.__re_header = re.compile(r'%(\w+)')
         self.__re_value = re.compile(r'\d+\.\d+')
 
+        self.__first = True
+
     def fetch(self):
         if self._platform['system'] == 'Linux':
             return self.__fetchLinuxStat()
-        pass
+
+        self._logger.error("Not Supported Platform " + self._platform['system'])
+        return None
 
     def __parseCpuInfo(self):
 
@@ -54,4 +58,9 @@ class Cpu(zmeter.Metric):
                 stat['%s.used' % cpu ] = 100.0 - stat['%s.idle' % cpu]
                 stats.update(stat)
 
+        if self.__first:
+            stats['meta.cores'] = len(self.__cores)
+            self.__first = False
+
         return stats
+

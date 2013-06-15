@@ -10,7 +10,7 @@ class test_MemInfo(unittest.TestCase):
     def tearDown(self):
         pass
 
-    def testFetchCpuInfo(self):
+    def testFetchMemInfo(self):
 
         zm = ZMeter()
         info = zm.fetch('mem')

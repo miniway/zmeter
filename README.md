@@ -3,6 +3,8 @@
 Send the following metrics to given ZeroMQ socket
 
 * cpu
+* mem
+* disk
 
   from zmeter import ZMeter
   zm = ZMeter('tcp://127.0.0.1:5555')
@@ -14,8 +16,6 @@ Send the following metrics to given ZeroMQ socket
 * pyzmq
 
 ## TODO
-* ram
-* hdd
 * net
 * process
 * windows support

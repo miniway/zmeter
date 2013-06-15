@@ -13,7 +13,9 @@ class Mem(zmeter.Metric):
     def fetch(self):
         if self._platform['system'] == 'Linux':
             return self.__fetchLinuxStat()
-        pass
+
+        self._logger.error("Not Supported Platform " + self._platform['system'])
+        return None
 
     def __parseMemInfo(self):
         for line in open('/proc/meminfo').readlines():
@@ -24,7 +26,6 @@ class Mem(zmeter.Metric):
     def __fetchLinuxStat(self):
         
         self.__parseMemInfo()
-        print self.__mem
         data = {
             'total'     : self.__mem['MemTotal'],
             'free'      : self.__mem['MemFree'],

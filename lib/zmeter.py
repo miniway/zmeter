@@ -12,24 +12,28 @@ class ZMeter(object):
 
     def __init__(self,  endpoints = 'tcp://127.0.0.1:5555',
                         serializer = None,
-                        logdir = tempfile.gettempdir(),
+                        logger = None,
+                        config = None,
+                        identity = None,
                         hwm = 10000):
         self.__serializer = serializer or JsonSerializer()
+        self.__config = config
 
         self.__plugins = {}
 
-        self.loadLogger(logdir)
+        self.loadLogger(logger)
         self.loadPlugins()
-        self.loadZMQ(endpoints, hwm)
+        self.loadZMQ(endpoints, identity, hwm)
 
-    def loadLogger(self, logdir):
-        self.logger = logging.getLogger(__name__)
-        self.logger.setLevel(logging.INFO)
-        log_handler = logging.handlers.TimedRotatingFileHandler(os.path.join(logdir, __name__ + ".log"))
-        log_formatter = logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s')
-        log_handler.setFormatter(log_formatter)
+    def plugins(self):
+        return self.__plugins.keys()
 
-        self.logger.addHandler(log_handler)
+    def loadLogger(self, logger):
+        if logger:
+            self.__logger = logger
+            return
+
+        self.__logger = StdoutLogger()
 
     def loadPlugins(self):
         platform = self.platform()
@@ -48,17 +52,19 @@ class ZMeter(object):
                     mod = getattr(loaded_module, comp) 
                     if type(mod) == type and issubclass(mod, Metric):
                         inst = mod()
-                        inst.init(platform, self.logger)
+                        inst.init(platform, self.__config, self.__logger)
                         self.__plugins[name] = inst
  
-    def loadZMQ(self, endpoints, hwm):
-        endpoints = self.asList(endpoints)
+    def loadZMQ(self, endpoints, identity, hwm):
+        endpoints = endpoints.split(',')
         self.__ctx = zmq.Context()
         self.__inbox = self.__ctx.socket(zmq.PUSH)
         self.__inbox.linger = 5000
+        if identity:
+            self.__inbox.identity = identity
         self.__inbox.hwm = hwm
         for endpoint in endpoints:
-            self.__inbox.connect(endpoint)
+            self.__inbox.connect(endpoint.strip())
 
     def asList(self, val):
         import types
@@ -68,11 +74,26 @@ class ZMeter(object):
         inst = self.__plugins.get(name)
         return inst and inst.fetch() or None
 
-    def send(self, name):
-        frames = self.__serializer.feed(name, self.fetch(name))
-        for frame in frames[:-1]:
-            self.__inbox.send(frame, zmq.SNDMORE)
-        self.__inbox.send(frames[-1])
+    def send(self, name, params = {}):
+        try:
+            frames = self.__serializer.feed({name: self.fetch(name)}, params)
+            for frame in frames[:-1]:
+                self.__inbox.send(frame, zmq.SNDMORE)
+            self.__inbox.send(frames[-1])
+        except Exception, e:
+            self.__logger.error(e, exc_info=sys.exc_info())
+
+    def sendall(self, params = {}):
+        try:
+            data = {}
+            for name in self.__plugins.keys():
+                data[name] = self.fetch(name)
+            frames = self.__serializer.feed(data, params)
+            for frame in frames[:-1]:
+                self.__inbox.send(frame, zmq.SNDMORE)
+            self.__inbox.send(frames[-1])
+        except Exception, e:
+            self.__logger.error(e, exc_info=sys.exc_info())
 
     def close(self):
         self.__inbox.close()
@@ -92,33 +113,39 @@ class ZMeter(object):
 
 class Serializer(object):
     def __init__(self):
-        pass
+        import socket
+        self.__host = platform.node()
+        self.__ip = [ip for ip in socket.gethostbyname_ex(socket.gethostname())[2] 
+                            if not ip.startswith("127.")][0]
 
-    def header(self, name):
+    def header(self, params = {}):
         ts_millis = long(time.time() * 1000)
-        return {
+        header = {
             'ts'    : ts_millis,
-            'host'  : platform.node(),
-            'kind'  : name,
+            'host'  : self.__host,
+            'ip'    : self.__ip,
         }
+        header.update(params)
+        return header
 
 class JsonSerializer(Serializer):
     def __init__(self):
         super(JsonSerializer, self).__init__()
         pass
 
-    def feed(self, name, body):
+    def feed(self, body, params):
         import json
-        return [json.dumps(self.header(name)), json.dumps(body)]
+        return [json.dumps(self.header(params)), json.dumps(body)]
 
 
 class Metric(object):
 
     def __init__(self):
-        self._logger = None
+        pass
 
-    def init(self, platform, logger):
+    def init(self, platform, config, logger):
         self._platform = platform
+        self._config = config
         self._logger = logger
 
     def fetch(self):
@@ -129,6 +156,15 @@ class Metric(object):
             proc = subprocess.Popen(args, stdout=subprocess.PIPE, close_fds=True)
             return proc.communicate()[0]
         except OSError, e:
-            self.logger.error(args[0], exc_info=sys.exc_info())
+            self._logger.error(args[0], exc_info=sys.exc_info())
             return None
 
+class StdoutLogger(object):
+
+    def write(self, *args):
+        sys.stdout.write(args)
+
+    info = write
+    debug = write
+    warn = write
+    error = write
