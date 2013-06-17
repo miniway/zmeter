@@ -7,6 +7,7 @@ import tempfile
 import logging
 import logging.handlers
 import zmq
+import signal
 
 class ZMeter(object):
 
@@ -153,11 +154,23 @@ class Metric(object):
 
     def execute(self, *args):
         try:
-            proc = subprocess.Popen(args, stdout=subprocess.PIPE, close_fds=True)
-            return proc.communicate()[0]
-        except OSError, e:
-            self._logger.error(args[0], exc_info=sys.exc_info())
-            return None
+            signal.signal(signal.SIGALRM, self.sigHandler)
+            signal.alarm(15)
+
+            try:
+                proc = subprocess.Popen(args, stdout=subprocess.PIPE, close_fds=True)
+                return proc.communicate()[0]
+            except OSError, e:
+                self._logger.error(args[0], exc_info=sys.exc_info())
+                return None
+            except Exception, e:
+                self._logger.error(args[0], exc_info=sys.exc_info())
+                return None
+        finally:
+            signal.alarm(0)
+
+    def sigHandler(self, signum, frame):
+        raise Exception('Timeout')
 
 class StdoutLogger(object):
 

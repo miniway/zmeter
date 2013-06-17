@@ -37,8 +37,8 @@ class Mem(zmeter.Metric):
         }
 
         data['used'] = data['total'] - data['free']
-        data['pused'] = data['used'] * 100.0 / data['total']
+        data['pused'] = round(data['used'] * 100.0 / data['total'], 2)
         data['swap.used'] = data['swap.total'] - data['swap.free']
-        data['swap.pused'] = data['swap.used'] * 100.0 / data['total']
+        data['swap.pused'] = round(data['swap.used'] * 100.0 / data['total'], 2)
 
         return data
