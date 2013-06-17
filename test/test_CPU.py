@@ -14,6 +14,8 @@ class test_CpuInfo(unittest.TestCase):
 
         zm = ZMeter()
         info = zm.fetch('cpu')
+
+        print info
         
         self.assertTrue(info.has_key('meta.cores'))
         self.assertTrue(info.has_key('all.usr'))

@@ -54,8 +54,8 @@ class Cpu(zmeter.Metric):
             else:
                 cpu = line[pos: line.find(' ', pos+3)].strip()
                 values = re.findall(self.__re_value, line)
-                stat = dict(map(lambda k,v: ('%s.%s' % (cpu, k), float(v)), names, values))
-                stat['%s.used' % cpu ] = 100.0 - stat['%s.idle' % cpu]
+                stat = dict(map(lambda k,v: ('%s.%s' % (cpu, k), round(float(v),2)), names, values))
+                stat['%s.used' % cpu ] = 100 - stat['%s.idle' % cpu]
                 stats.update(stat)
 
         if self.__first:
