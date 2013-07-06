@@ -11,10 +11,10 @@ class Mem(zmeter.Metric):
         self.__mem = {}
 
     def fetch(self):
-        if self._platform['system'] == 'Linux':
+        if self._system == 'Linux':
             return self.__fetchLinuxStat()
 
-        self._logger.error("Not Supported Platform " + self._platform['system'])
+        self._logger.error("Not Supported Platform " + self._system)
         return None
 
     def __parseMemInfo(self):
@@ -31,7 +31,7 @@ class Mem(zmeter.Metric):
             'free'      : self.__mem['MemFree'],
             'cached'    : self.__mem['Cached'],
             'buffers'   : self.__mem['Buffers'],
-            'shared'    : self.__mem['Shmem'],
+            'shared'    : self.__mem.get('Shmem',0),
             'swap.total': self.__mem['SwapTotal'],
             'swap.free' : self.__mem['SwapFree'],
         }

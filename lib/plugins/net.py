@@ -5,27 +5,21 @@ import subprocess
 
 class Net(zmeter.Metric):
 
-    ACCEPTS = [
-        'in.bytes',
-        'in.packets',
-        'in.errs',
-        'out.bytes',
-        'out.packets',
-        'out.errs',
-    ]
+    ACCEPTS = {
+        'in.bytes'      : 'in.bps',
+        'in.packets'    : 'in.pps',
+        'in.errs'       : 'in.errs',
+        'out.bytes'     : 'out.bps',
+        'out.packets'   : 'out.pps',
+        'out.errs'      : 'out.errs',
+    }
     def __init__(self):
         super(Net, self).__init__()
 
         self.__ifs = []
+        self.__prev = {}
 
-    def fetch(self):
-        if self._platform['system'] == 'Linux':
-            return self.__fetchLinuxStat()
-
-        self._logger.error("Not Supported Platform " + self._platform['system'])
-        return None
-
-    def __fetchLinuxStat(self):
+    def fetchLinux(self):
 
         ifs = []
         idx = 0
@@ -51,7 +45,16 @@ class Net(zmeter.Metric):
             for j in range(len(cols)):
                 if cols[j] not in Net.ACCEPTS:
                     continue
-                stats['%d.%s' % (idx, cols[j])] = int(data[j])
+                col = Net.ACCEPTS[cols[j]]
+                key = '%d.%s' % (idx, col)
+                value = long(data[j]) 
+                prev = self.__prev.get(key)
+                if prev is not None:
+                    if col in [ 'in.errs', 'out.errs']:
+                        stats[key] = value - prev
+                    else:
+                        stats[key] = round((value - prev) / self._elapsed, 2)
+                self.__prev[key] = value
             idx += 1
 
         if self.__ifs != ifs:

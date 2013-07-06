@@ -6,21 +6,27 @@ import subprocess
 import tempfile
 import logging
 import logging.handlers
-import zmq
+import szmq as zmq
 import signal
+import socket
+import fcntl
+import struct
+import array
+ 
 
 class ZMeter(object):
 
     def __init__(self,  endpoints = 'tcp://127.0.0.1:5555',
                         serializer = None,
                         logger = None,
-                        config = None,
+                        config = {},
                         identity = None,
                         hwm = 10000):
         self.__serializer = serializer or JsonSerializer()
         self.__config = config
 
         self.__plugins = {}
+        self.__closed = False
 
         self.loadLogger(logger)
         self.loadPlugins()
@@ -37,7 +43,7 @@ class ZMeter(object):
         self.__logger = StdoutLogger()
 
     def loadPlugins(self):
-        platform = self.platform()
+        self._platform = self.platform()
         plugin_dir = []
         plugin_dir.append(os.path.join(os.path.dirname(__file__), 'plugins'))
         for path in plugin_dir:
@@ -53,9 +59,11 @@ class ZMeter(object):
                     mod = getattr(loaded_module, comp) 
                     if type(mod) == type and issubclass(mod, Metric):
                         inst = mod()
-                        inst.init(platform, self.__config, self.__logger)
+                        inst.init(self._platform, self.__config, self.__logger)
                         self.__plugins[name] = inst
- 
+
+        self.__logger.info("Loaded Plugins: " + str(self.__plugins.keys()))
+
     def loadZMQ(self, endpoints, identity, hwm):
         endpoints = endpoints.split(',')
         self.__ctx = zmq.Context()
@@ -73,7 +81,19 @@ class ZMeter(object):
 
     def fetch(self, name):
         inst = self.__plugins.get(name)
-        return inst and inst.fetch() or None
+        if not inst:
+            return None
+
+        system = self._platform['system']
+        method = getattr(inst, 'fetch%s' % system, getattr(inst, 'fetch'))
+        if not method:
+            self._logger.error("Not Supported Platform %s" % system)
+            return None
+        inst.beforeFetch()
+        result = method()
+        inst.afterFetch(result)
+
+        return result
 
     def send(self, name, params = {}):
         try:
@@ -82,52 +102,98 @@ class ZMeter(object):
                 self.__inbox.send(frame, zmq.SNDMORE)
             self.__inbox.send(frames[-1])
         except Exception, e:
-            self.__logger.error(e, exc_info=sys.exc_info())
+            self.__logger.exception("Exception at 'send'")
 
     def sendall(self, params = {}):
         try:
             data = {}
             for name in self.__plugins.keys():
-                data[name] = self.fetch(name)
+                stat = self.fetch(name)
+                if stat:
+                    data[name] = stat
             frames = self.__serializer.feed(data, params)
             for frame in frames[:-1]:
                 self.__inbox.send(frame, zmq.SNDMORE)
             self.__inbox.send(frames[-1])
         except Exception, e:
-            self.__logger.error(e, exc_info=sys.exc_info())
+            self.__logger.exception("Exception at 'sendall'")
 
     def close(self):
+        # Synchronize
+        if self.__closed:
+            return
+        self.__closed = True
         self.__inbox.close()
         self.__ctx.term()
+
+    def __del__(self):
+        self.close()
         
     def platform(self):
-        pf = {'machine'     : platform.machine(), 
-              'processor'   : platform.processor(), 
-              'system'      : platform.system(),
-              'dist'        : None }
-
-        if pf['system'] in ['Linux']:
-            pf['dist'] = platform.linux_distribution()
+        cores = self.__parseCpuInfo()
+        pf = {
+            'system'        : platform.system(),
+            'clock_ticks'   : os.sysconf('SC_CLK_TCK'),
+            'page_size'     : os.sysconf('SC_PAGE_SIZE'),
+            'cores'         : len(cores)
+        }
 
         return pf
+
+    def __parseCpuInfo(self):
+
+        cores = []
+        core = {}
+        for line in open('/proc/cpuinfo').readlines():
+            kv = line.split(':', 1)
+            if len(kv) == 1:
+                cores.append(core)
+                core = {}
+            else:
+                core[kv[0].strip()] = kv[1].strip()
+
+        return cores
+        
 
 
 class Serializer(object):
     def __init__(self):
         import socket
-        self.__host = platform.node()
-        self.__ip = [ip for ip in socket.gethostbyname_ex(socket.gethostname())[2] 
-                            if not ip.startswith("127.")][0]
+        self.__ip = [ (name, self.formatIP(ip)) for name, ip in self.interfaces() if name != 'lo' ][0][1]
 
     def header(self, params = {}):
         ts_millis = long(time.time() * 1000)
         header = {
             'ts'    : ts_millis,
-            'host'  : self.__host,
             'ip'    : self.__ip,
         }
         header.update(params)
         return header
+
+    def interfaces(self):
+        max_possible = 128  # arbitrary. raise if needed.
+        bytes = max_possible * 32
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        names = array.array('B', '\0' * bytes)
+        outbytes = struct.unpack('iL', fcntl.ioctl(
+            s.fileno(),
+            0x8912,  # SIOCGIFCONF
+            struct.pack('iL', bytes, names.buffer_info()[0])
+        ))[0]
+        namestr = names.tostring()
+        lst = []
+        for i in range(0, outbytes, 40):
+            name = namestr[i:i+16].split('\0', 1)[0]
+            ip   = namestr[i+20:i+24]
+            lst.append((name, ip))
+        return lst
+ 
+    def formatIP(self, addr):
+        return str(ord(addr[0])) + '.' + \
+               str(ord(addr[1])) + '.' + \
+               str(ord(addr[2])) + '.' + \
+               str(ord(addr[3]))
+ 
 
 class JsonSerializer(Serializer):
     def __init__(self):
@@ -144,10 +210,25 @@ class Metric(object):
     def __init__(self):
         pass
 
-    def init(self, platform, config, logger):
-        self._platform = platform
+    def init(self, platforms, config, logger):
+        for k, v in platforms.items():
+            setattr(self, '_%s' % k, v)
+        self._platform = platforms
         self._config = config
         self._logger = logger
+        self._elapsed = None
+        self._last_updated = None
+        self._now = None
+
+    def beforeFetch(self):
+        now = time.time()
+        if self._now:
+            self._elapsed = now - self._now
+        self._now = now
+
+    def afterFetch(self, result):
+        if result:
+            self._last_updated = time.time()
 
     def fetch(self):
         raise Exception("Must Override fetch")
@@ -175,7 +256,13 @@ class Metric(object):
 class StdoutLogger(object):
 
     def write(self, *args):
-        sys.stdout.write(args)
+        for m in args:
+            sys.stdout.write(m)
+
+    def exception(self, *args):
+        import traceback
+        sys.stdout.write(args[0])
+        sys.stdout.write(traceback.format_exc())
 
     info = write
     debug = write

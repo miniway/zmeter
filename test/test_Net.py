@@ -1,4 +1,5 @@
 import sys
+import time
 import unittest
 
 from zmeter import ZMeter
@@ -14,9 +15,11 @@ class test_NetInfo(unittest.TestCase):
 
         zm = ZMeter()
         info = zm.fetch('net')
+        self.assertTrue(info.has_key('meta.ifs'))
 
-        print info
-        
+        time.sleep(5)
+        info = zm.fetch('net')
+
         self.assertTrue(info.has_key('1.in.bytes'))
         self.assertTrue(info.has_key('0.out.bytes'))
 
