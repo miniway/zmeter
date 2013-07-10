@@ -20,6 +20,6 @@ class test_NetInfo(unittest.TestCase):
         time.sleep(5)
         info = zm.fetch('net')
 
-        self.assertTrue(info.has_key('1.in.bytes'))
-        self.assertTrue(info.has_key('0.out.bytes'))
+        self.assertTrue(info.has_key('1.in.bps'))
+        self.assertTrue(info.has_key('0.out.bps'))
 

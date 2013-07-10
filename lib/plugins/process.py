@@ -8,14 +8,15 @@ except ImportError:
 
 try:
     json.encoder.FLOAT_REPR = lambda f: ("%.2f" % f)
+    json.encoder.c_make_encoder = None
 except:
     pass
 
 class Process(zmeter.Metric):
 
     COMM    = 1
-    UTIME   = 14
-    STIME   = 15
+    UTIME   = 13
+    STIME   = 14
     VSIZE   = 22
     RSS     = 23
 
@@ -64,7 +65,7 @@ class Process(zmeter.Metric):
             self.__prev[pid] = value
 
             usage = current - previous[0]
-            cpu_data[pid] = round(usage * 100.0 / self._clock_ticks / self._elapsed / self._cores , 2)
+            cpu_data[pid] = round(usage * 100.0 / self._clock_ticks / self._elapsed, 2)
             mem_data[pid] = int(values[Process.RSS]) * self._page_size
 
             for i, watch in enumerate(watches):

@@ -1,4 +1,5 @@
 import os
+import sys
 import time
 import errno
 import socket
@@ -138,6 +139,9 @@ class IoThread(threading.Thread):
         self.__stop = False
         self.loadLogger("./", logging.INFO)
 
+    def stopped(self):
+        return self.__stop
+
     def loadLogger(self, logdir, level):
         name = 'zmq'
         self.logger = logging.getLogger(name)
@@ -167,6 +171,7 @@ class IoThread(threading.Thread):
         # end while
         self.__poller.close()
         self.__pipe.close()
+        self.__stop = True
         self.logger.info("End IO Thread")
 
     def handlePoll(self, fo, event):
@@ -292,9 +297,13 @@ class IoThread(threading.Thread):
 
     def startConnect(self, s):
         parsed = urlparse(s.endpoint)
-        assert parsed.scheme == 'tcp'
-        assert parsed.netloc.find(':') > 0
-        host, port = parsed.netloc.split(':')
+        assert parsed[0] == 'tcp'
+        if sys.version_info < (2,6):
+            netloc = parsed[2].replace('//','')
+        else:
+            netloc = parsed[1]
+        assert netloc.find(':') > 0
+        host, port = netloc.split(':')
         if s.sock is not None:
             s.sock.close()
         s.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
@@ -320,18 +329,26 @@ class IoThread(threading.Thread):
         fo.close()
 
     def disconnect(self, s):
+        if self.__stop:
+            raise Exception("IoThread Stopped")
         self.__cmds.put(("disconnect", s))
         self.__pipe.write('X')
 
     def send(self, s, message, flags):
+        if self.__stop:
+            raise Exception("IoThread Stopped")
         self.__send_bufs[s].put(self.__build(message, flags))
         self.__cmds.put(("send", s))
         self.__pipe.write('S')
 
     def recv(self, s, flags):
+        if self.__stop:
+            raise Exception("IoThread Stopped")
         return self.__recv_bufs[s].get(flags != DONTWAIT)
 
     def close(self):
+        if self.__stop:
+            return
         self.__cmds.put(("term", None))
         self.__pipe.write('T')
 
@@ -390,13 +407,19 @@ class Poller(object):
     POLLERR = 4
 
     def __init__(self):
-        self.__epoll = select.epoll()
+        try:
+            self.__epoll = select.epoll()
+            self.__poll = None
+        except AttributeError:
+            self.__epoll = None
+            self.__poll = select.poll()
         self.__events = {}
         self.__reverse = {}
         pass
 
     def close(self):
-        self.__epoll.close()
+        if self.__epoll:
+            self.__epoll.close()
 
     def register(self, f, event):
         if f is None:
@@ -406,17 +429,27 @@ class Poller(object):
         self.__events[f] = new_event
         self.__reverse[f.fileno()] = f
 
-        poll_event = 0
-        if new_event & Poller.POLLIN:
-            poll_event |= select.EPOLLIN
-        if new_event & Poller.POLLOUT:
-            poll_event |= select.EPOLLOUT
+        if self.__epoll:
+            poll_event = 0
+            if new_event & Poller.POLLIN:
+                poll_event |= select.EPOLLIN
+            if new_event & Poller.POLLOUT:
+                poll_event |= select.EPOLLOUT
 
-        #print f.fileno(), poll_event
-        if old_event:
-            self.__epoll.modify(f, poll_event)
-        else:
-            self.__epoll.register(f, poll_event)
+            #print f.fileno(), poll_event
+            if old_event:
+                self.__epoll.modify(f, poll_event)
+            else:
+                self.__epoll.register(f, poll_event)
+
+        elif self.__poll:
+            poll_event = 0
+            if new_event & Poller.POLLIN:
+                poll_event |= select.POLLIN
+            if new_event & Poller.POLLOUT:
+                poll_event |= select.POLLOUT
+
+            self.__poll.register(f, poll_event)
 
     def unregister(self, f, event):
         if not self.__events.has_key(f):
@@ -424,39 +457,75 @@ class Poller(object):
         old_event = self.__events[f]
         new_event = old_event &~ event;
 
-        poll_event = 0
-        if new_event & Poller.POLLIN:
-            poll_event |= select.EPOLLIN
-        if new_event & Poller.POLLOUT:
-            poll_event |= select.EPOLLOUT
+        if self.__epoll:
+            poll_event = 0
+            if new_event & Poller.POLLIN:
+                poll_event |= select.EPOLLIN
+            if new_event & Poller.POLLOUT:
+                poll_event |= select.EPOLLOUT
 
-        if new_event:
-            self.__epoll.modify(f, poll_event)
-        else:
-            self.__epoll.unregister(f)
-            del self.__events[f]
+            if new_event:
+                self.__epoll.modify(f, poll_event)
+            else:
+                self.__epoll.unregister(f)
+                del self.__events[f]
+
+        elif self.__poll:
+            poll_event = 0
+            if new_event & Poller.POLLIN:
+                poll_event |= select.POLLIN
+            if new_event & Poller.POLLOUT:
+                poll_event |= select.POLLOUT
+
+            if new_event:
+                self.__poll.register(f, poll_event)
+            else:
+                self.__poll.unregister(f)
+                del self.__events[f]
 
     def poll(self, timeout):
         result = []
-        for fd, event in self.__epoll.poll(timeout / 1000):
+        if self.__epoll:
+            for fd, event in self.__epoll.poll(timeout / 1000):
 
-            result_event = 0
-            if event & select.EPOLLIN:
-                result_event |= Poller.POLLIN
-                event = event &~ select.EPOLLIN;
-            if event & select.EPOLLOUT:
-                result_event |= Poller.POLLOUT
-                event = event &~ select.EPOLLOUT;
-            if event & select.EPOLLERR:
-                result_event |= Poller.POLLERR
-                event = event &~ select.EPOLLERR;
-            if event & select.EPOLLHUP:
-                result_event |= Poller.POLLERR
-                event = event &~ select.EPOLLHUP;
+                result_event = 0
+                if event & select.EPOLLIN:
+                    result_event |= Poller.POLLIN
+                    event = event &~ select.EPOLLIN;
+                if event & select.EPOLLOUT:
+                    result_event |= Poller.POLLOUT
+                    event = event &~ select.EPOLLOUT;
+                if event & select.EPOLLERR:
+                    result_event |= Poller.POLLERR
+                    event = event &~ select.EPOLLERR;
+                if event & select.EPOLLHUP:
+                    result_event |= Poller.POLLERR
+                    event = event &~ select.EPOLLHUP;
 
-            if event > 0:
-                raise Exception("Unhandled Event " + str(event))
-            result.append((self.__reverse[fd], result_event))
+                if event > 0:
+                    raise Exception("Unhandled Event " + str(event))
+                result.append((self.__reverse[fd], result_event))
+
+        elif self.__poll:
+            for fd, event in self.__poll.poll(timeout / 1000):
+
+                result_event = 0
+                if event & select.POLLIN:
+                    result_event |= Poller.POLLIN
+                    event = event &~ select.POLLIN;
+                if event & select.POLLOUT:
+                    result_event |= Poller.POLLOUT
+                    event = event &~ select.POLLOUT;
+                if event & select.POLLERR:
+                    result_event |= Poller.POLLERR
+                    event = event &~ select.POLLERR;
+                if event & select.POLLHUP:
+                    result_event |= Poller.POLLERR
+                    event = event &~ select.POLLHUP;
+
+                if event > 0:
+                    raise Exception("Unhandled Event " + str(event))
+                result.append((self.__reverse[fd], result_event))
 
         return result
 
