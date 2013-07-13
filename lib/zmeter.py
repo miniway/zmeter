@@ -16,6 +16,8 @@ import array
 
 class ZMeter(object):
 
+    OPTIONAL_PLUGINS = ['mysql']
+
     def __init__(self,  endpoints = 'tcp://127.0.0.1:5555',
                         serializer = None,
                         logger = None,
@@ -50,9 +52,13 @@ class ZMeter(object):
             sys.path.append(path)
             for plugin in os.listdir(path):
                 if not plugin.endswith('.py') \
-                    or plugin.startswith('__init__'):
+                        or plugin.startswith('__init__'):
                     continue
                 name, ext = os.path.splitext(plugin)
+                if name in ZMeter.OPTIONAL_PLUGINS and \
+                        not self.__config.has_key(name):
+                    continue
+
                 loaded_module = __import__( name ) 
                 
                 for comp in dir(loaded_module):
@@ -245,10 +251,10 @@ class Metric(object):
                 proc = subprocess.Popen(args, stdout=subprocess.PIPE, close_fds=True)
                 return proc.communicate()[0]
             except OSError, e:
-                self._logger.error(args[0], exc_info=sys.exc_info())
+                self._logger.exception(args[0])
                 return None
             except Exception, e:
-                self._logger.error(args[0], exc_info=sys.exc_info())
+                self._logger.exception(args[0])
                 return None
         finally:
             signal.alarm(0)

@@ -10,13 +10,6 @@ class IoStat(zmeter.Metric):
 
         self.__devices = []
 
-    def fetch(self):
-        if self._platform['system'] == 'Linux':
-            return self.__fetchLinuxStat()
-
-        self._logger.error("Not Supported Platform " + self._platform['system'])
-        return None
-
     def __names(self, name):
         name = name.lower()
         name = name.replace('/s','')
@@ -33,7 +26,7 @@ class IoStat(zmeter.Metric):
 
         return name
 
-    def __fetchLinuxStat(self):
+    def fetchLinux(self):
 
         stats = {}
         result = self.execute('iostat', '-d', '1', '2', '-x', '-k')
