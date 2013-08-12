@@ -1,4 +1,5 @@
 import sys
+import platform
 import unittest
 
 from zmeter import ZMeter
@@ -11,6 +12,9 @@ class test_Mysql(unittest.TestCase):
         pass
 
     def testFetchMysql(self):
+
+        if platform.system() == 'Windows':
+            return
 
         zm = ZMeter(config = {'mysql': {'port' : 3306}})
         info = zm.fetch('mysql')

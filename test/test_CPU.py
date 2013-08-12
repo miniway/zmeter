@@ -1,5 +1,6 @@
 import sys
 import unittest
+import platform
 
 from zmeter import ZMeter
 
@@ -10,19 +11,20 @@ class test_CpuInfo(unittest.TestCase):
     def tearDown(self):
         pass
 
-    def xestFetchCpuInfo(self):
+    def testFetchCpuInfo(self):
 
         zm = ZMeter()
         info = zm.fetch('cpu')
 
         print info
         
-        self.assertTrue(info.has_key('meta.cores'))
         self.assertTrue(info.has_key('all.usr'))
         self.assertEquals(info.get('all.idle') , 100.0 - info.get('all.used'))
 
     def testSendCpuInfo(self):
 
+        if platform.system() == 'Windows':
+            return
         import zmq
         import json
 

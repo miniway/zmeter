@@ -8,14 +8,7 @@ class Load(zmeter.Metric):
     def __init__(self):
         super(Load, self).__init__()
 
-    def fetch(self):
-        if self._platform['system'] == 'Linux':
-            return self.__fetchLinuxStat()
-
-        self._logger.error("Not Supported Platform " + self._platform['system'])
-        return None
-
-    def __fetchLinuxStat(self):
+    def fetchLinux(self):
         line = open('/proc/loadavg').readlines()[0].strip()
         cols = line.split(' ')
         if len(cols) != 5:
@@ -29,6 +22,16 @@ class Load(zmeter.Metric):
             'avg15': round(float(cols[2]),2),
             'running': int(running),
             'threads': int(threads),
+        }
+
+        return stats
+
+    def fetchWindows(self):
+
+        data = self._wmi.Win32_PerfFormattedData_PerfOS_System()[0]
+        stats = {
+            'load'      : int(data.ProcessorQueueLength),
+            'threads'   : int(data.Threads)
         }
 
         return stats

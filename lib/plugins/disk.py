@@ -10,14 +10,7 @@ class Disk(zmeter.Metric):
 
         self.__mounts = []
 
-    def fetch(self):
-        if self._platform['system'] == 'Linux':
-            return self.__fetchLinuxStat()
-
-        self._logger.error("Not Supported Platform " + self._platform['system'])
-        return None
-
-    def __fetchLinuxStat(self):
+    def fetchLinux(self):
         
         result = self.execute('df', '-k')
         stats = {}
@@ -43,9 +36,9 @@ class Disk(zmeter.Metric):
 
             try:
                 data = {
-                    'total'     : int(total) * 1024,
-                    'used'      : int(used) * 1024,
-                    'free'      : int(available) * 1024,
+                    'total'     : long(total) * 1024,
+                    'used'      : long(used) * 1024,
+                    'free'      : long(available) * 1024,
                     'pused'     : int(pused.replace('%',''))
                 }
                 data['pfree'] = 100 - data['pused']
@@ -67,3 +60,31 @@ class Disk(zmeter.Metric):
 
 
         return stats
+
+    def fetchWindows(self):
+        stats = {}
+        mounts = []
+        idx = 0
+        for data in self._wmi.Win32_LogicalDisk (DriveType=3):
+            mount = data.Name;
+            data = {
+                'total'     : long(data.Size),
+                'free'      : long(data.FreeSpace),
+            }
+            data['used'] = data['total'] - data['free']
+            data['pfree'] = round(data['free'] * 100.0 / data['total'], 2)
+            data['pused'] = round(100.0 - data['pfree'],2)
+            stat = dict(map(lambda (k, v): ('%s.%s' % (idx, k), v), data.items()))
+
+            mounts.append(mount)
+            idx += 1
+
+            stats.update(stat)
+
+        if self.__mounts != mounts:
+            stats['meta.mounts'] = ','.join(mounts)
+            self.__mounts = mounts
+
+        return stats
+
+            

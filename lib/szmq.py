@@ -57,7 +57,7 @@ class Socket(object):
         self.endpoint = endpoint
 
         ret = self.ctx.io_thread.startConnect(self)
-        if ret == 0 or ret == errno.EINPROGRESS:
+        if ret == 0 or ret == errno.EINPROGRESS or 10035: # errno.WSAEWOULDBLOCK
             pass
         else: 
             raise Exception("Connection Error " + str(ret))
@@ -100,6 +100,7 @@ class Pipe(object):
 
     def __init__(self):
         self.__r, self.__w = os.pipe()
+        self.__peek = None
 
     def fileno(self):
         return self.__r
@@ -110,7 +111,19 @@ class Pipe(object):
         except OSError:
             pass
 
+    def peek(self):
+        if self.__peek is not None:
+            return True
+        self.__peek = os.read(self.__r, 1)
+        if self.__peek is None:
+            return False
+        return True
+    
     def recv(self):
+        if self.__peek:
+            data = self.__peek
+            self.__peek = None
+            return data
         return os.read(self.__r, 1)
 
     def close(self):
@@ -213,7 +226,7 @@ class IoThread(threading.Thread):
             try:
                 data = fo.recv(65536)
             except socket.error, e:
-                if e.args[0] == errno.ECONNRESET:
+                if e.args[0] in [errno.ECONNRESET, errno.ECONNREFUSED]:
                     data = None
                 else:
                     raise
@@ -259,10 +272,23 @@ class IoThread(threading.Thread):
                     except Queue.Empty:
                         self.__poller.unregister(fo, Poller.POLLOUT)
                         return
-                        
-                sent = fo.send(data)
+                
+                try:
+                    sent = fo.send(data)
+                except socket.error, e:
+                    if e.args[0] in [errno.ECONNRESET, errno.ECONNREFUSED]:
+                       sent = -1
+                    else:
+                       raise
+                if sent < 0:
+                    self.logger.info("Disconnected")
+                    self.__disconnect(fo)
+                    self.startConnect(sock)
+                    return
+            
                 if sent == len(data):
                     self.__sendings[fo] = None
+                    
                     if self.__send_bufs[sock].empty():
                         self.__poller.unregister(fo, Poller.POLLOUT)
                 elif sent < len(data):
@@ -309,7 +335,7 @@ class IoThread(threading.Thread):
         s.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         s.sock.setblocking(0)
         ret = s.sock.connect_ex((host, int(port)))
-        if ret == 0 or ret == errno.EINPROGRESS:
+        if ret == 0 or ret == errno.EINPROGRESS or ret == 10035: # errno.WSAEWOULDBLOCK
             self.__cmds.put(("connect", s))
             self.__pipe.write('C')
 
@@ -407,14 +433,17 @@ class Poller(object):
     POLLERR = 4
 
     def __init__(self):
-        try:
+        self.__epoll = None
+        self.__poll = None
+
+        if hasattr(select,'epoll'):
             self.__epoll = select.epoll()
-            self.__poll = None
-        except AttributeError:
-            self.__epoll = None
+        elif hasattr(select, 'poll'):
             self.__poll = select.poll()
+
         self.__events = {}
         self.__reverse = {}
+        self.__test = 0
         pass
 
     def close(self):
@@ -482,6 +511,11 @@ class Poller(object):
             else:
                 self.__poll.unregister(f)
                 del self.__events[f]
+        else:
+            if new_event:
+                self.__events[f] = new_event
+            else:
+                del self.__events[f]
 
     def poll(self, timeout):
         result = []
@@ -526,6 +560,37 @@ class Poller(object):
                 if event > 0:
                     raise Exception("Unhandled Event " + str(event))
                 result.append((self.__reverse[fd], result_event))
-
+        else:
+            read_target = []
+            write_target = []
+            pipes = []
+            for f, event in self.__events.items():
+                if isinstance(f, Pipe):
+                    pipes.append(f)
+                    continue
+                if event & Poller.POLLIN:
+                    read_target.append(f)
+                if event & Poller.POLLOUT:
+                    write_target.append(f)
+            
+            if read_target or write_target:
+                r, w, e = select.select(read_target, write_target,[], timeout/1000)
+            else:
+                r, w, e = [],[],[]
+            
+            result_event = {}
+            for f in r:
+                result_event.setdefault(f, 0)
+                result_event[f] |= Poller.POLLIN
+            for f in w:
+                result_event.setdefault(f, 0)
+                result_event[f] |= Poller.POLLOUT
+            if not result_event:
+                for p in pipes:
+                    if p.peek():
+                        result_event[p] = Poller.POLLIN
+            
+            result = result_event.items()
+            
         return result
 

@@ -39,4 +39,21 @@ class Cpu(zmeter.Metric):
                 stats.update(stat)
 
         return stats
-
+    
+    def fetchWindows(self):
+        stats = {}
+        for data in self._wmi.Win32_PerfFormattedData_Counters_ProcessorInformation():
+            if data.Name == '_Total':
+                cpu = 'all'
+            else:
+                cpu = data.Name.split(",")[0]
+            stat = {
+                '%s.used' % cpu : int(data.PercentProcessorTime),
+                '%s.idle' % cpu : int(data.PercentIdleTime),
+                '%s.usr' % cpu : int(data.PercentUserTime),
+                '%s.sys' % cpu : int(data.PercentPrivilegedTime),
+                '%s.irq' % cpu : int(data.PercentInterruptTime),
+            }
+            stats.update(stat)
+            
+        return stats
