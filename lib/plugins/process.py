@@ -27,18 +27,33 @@ class Process(zmeter.Metric):
         self.__cmdlines = {}
         self.__watches = []
 
-    def fetchLinux(self):
-
+    def __initWatch(self, stats):
         watches = self._config.get('watch', [])
     
-        cpu_data = {}
-        mem_data = {}
-        stats = {}
         for i in range(len(watches)):
             stats['watch.%d.cpu' % i] = 0
             stats['watch.%d.mem' % i] = 0
             stats['watch.%d.count' % i] = 0
 
+        if self.__watches != watches:
+            stats['meta.watches'] = ','.join(watches)
+            self.__watches = watches
+            
+        return watches;
+
+    def __updateWatch(self, pid, cmdline, cpu_data, mem_data, stats):
+        for i, watch in enumerate(self.__watches):
+            if cmdline.find(watch) >= 0:
+                stats['watch.%d.cpu' % i] += cpu_data[pid]
+                stats['watch.%d.mem' % i] += mem_data[pid]
+                stats['watch.%d.count' % i] += 1
+            
+    def fetchLinux(self):
+        cpu_data = {}
+        mem_data = {}
+        stats = {}
+        watches = self.__initWatch(stats);
+    
         for pid in os.listdir('/proc/'):
             if not pid.isdigit():
                 continue
@@ -65,15 +80,15 @@ class Process(zmeter.Metric):
             self.__prev[pid] = value
 
             usage = current - previous[0]
-            cpu_data[pid] = round(usage * 100.0 / self._clock_ticks / self._elapsed, 2)
+            cpu_data[pid] = round(usage * 100.0 / self._clock_ticks / self._elapsed / self._cores, 2)
             mem_data[pid] = int(values[Process.RSS]) * self._page_size
 
-            for i, watch in enumerate(watches):
-                if cmdline.find(watch) >= 0:
-                    stats['watch.%d.cpu' % i] += cpu_data[pid]
-                    stats['watch.%d.mem' % i] += mem_data[pid]
-                    stats['watch.%d.count' % i] += 1
+            self.__updateWatch(pid, cmdline, cpu_data, mem_data, stats)
 
+        self.__sortStats(cpu_data, mem_data, stats)
+        return stats
+    
+    def __sortStats(self, cpu_data, mem_data, stats):
         values = sorted(cpu_data, key=cpu_data.get, reverse=True)
         top = []
         for pid in values[:10]:
@@ -93,12 +108,6 @@ class Process(zmeter.Metric):
                     pass
 
         stats['snapshot.top10'] = json.dumps(top)
-
-        if self.__watches != watches:
-            stats['meta.watches'] = ','.join(watches)
-            self.__watches = watches
-
-        return stats
         
     def __getCmdline(self, pid, name):
         cmdline = self.__cmdlines.get(pid)
@@ -115,3 +124,33 @@ class Process(zmeter.Metric):
 
         self.__cmdlines[pid] = cmdline
         return cmdline
+    
+    def fetchWindows(self):
+        self.__cmdlines.clear()
+        #self.__cmdlines[0] = 'Idle'
+        cpu_data = {}
+        mem_data = {}
+        stats = {}
+        watches = self.__initWatch(stats);
+
+        for data in self._wmi.Win32_Process():
+            pid = data.ProcessId
+            cmdline = data.CommandLine or 'Idle'
+            self.__cmdlines[pid] = cmdline
+            current = long(getattr(data,'UserModeTime',0)) + long(getattr(data,'KernelModeTime',0)) # 100 nanos
+            previous = self.__prev.get(pid)
+
+            value = (current, cmdline, self._now)
+
+            if not previous:
+                self.__prev[pid] = value
+                continue
+
+            self.__prev[pid] = value
+
+            usage = current - previous[0]
+            cpu_data[pid] = round(usage * 100 / 10000000 / self._cores /self._elapsed, 2)
+            mem_data[pid] = long(data.WorkingSetSize)
+        
+        self.__sortStats(cpu_data, mem_data, stats)
+        return stats

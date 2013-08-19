@@ -158,7 +158,7 @@ class ZMeter(object):
                 nic.append(inf.Description)
             pf.update({
                 'wmi'           : c,
-                'nic'           : nic,
+                'nic'           : nic
             })
 
         return pf

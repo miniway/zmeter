@@ -65,3 +65,33 @@ class IoStat(zmeter.Metric):
             self.__devices = devices
 
         return stats
+    
+    def fetchWindows(self):
+        stats = {}
+        devices = []
+        for data in self._wmi.Win32_PerfFormattedData_PerfDisk_PhysicalDisk():
+            if data.Name == '_Total':
+                continue
+            idx, device = data.Name.split(" ")
+            devices.append(device)
+            stat = {
+                '%s.%%util' % idx : int(data.PercentDiskTime),
+                '%s.iowait' % idx : int(AvgDiskSecPerTransfer),
+                '%s.qu-sz' % idx : int(data.CurrentDiskQueueLength),
+                '%s.avgqu-sz' % idx : int(data.AvgDiskQueueLength),
+                '%s.svctm' % idx : int(data.AvgDiskSecPerTransfer) * 1000, # milli seconds
+                '%s.r/s' % idx : int(data.DiskReadsPerSec),
+                '%s.w/s' % idx : int(data.DiskWritesPerSec),
+                '%s.rrpm/s' % idx : int(data.DiskReadsPerSec),
+                '%s.wrpm/s' % idx : int(data.DiskWritesPerSec),
+                '%s.rkB/s' % idx : round(float(data.DiskReadBytesPerSec) / 1024.0),
+                '%s.wkB/s' % idx : round(float(data.DiskWriteBytesPerSec) / 1024.0),
+
+            }
+            stats.update(stat)
+
+        if self.__devices != devices:
+            stats['meta.devs'] = ','.join(devices)
+            self.__devices = devices
+            
+        return stats
