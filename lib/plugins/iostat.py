@@ -76,7 +76,7 @@ class IoStat(zmeter.Metric):
             devices.append(device)
             stat = {
                 '%s.%%util' % idx : int(data.PercentDiskTime),
-                '%s.iowait' % idx : int(AvgDiskSecPerTransfer),
+                '%s.iowait' % idx : int(data.AvgDiskSecPerTransfer),
                 '%s.qu-sz' % idx : int(data.CurrentDiskQueueLength),
                 '%s.avgqu-sz' % idx : int(data.AvgDiskQueueLength),
                 '%s.svctm' % idx : int(data.AvgDiskSecPerTransfer) * 1000, # milli seconds
