@@ -47,25 +47,38 @@ class ZMeter(object):
         self._platform = self.platform()
         plugin_dir = []
         plugin_dir.append(os.path.join(os.path.dirname(__file__), 'plugins'))
+        names = []
         for path in plugin_dir:
             sys.path.append(path)
-            for plugin in os.listdir(path):
-                if not plugin.endswith('.py') \
+            try:
+                for plugin in os.listdir(path):
+                    if not plugin.endswith('.py') \
                         or plugin.startswith('__init__'):
-                    continue
-                name, ext = os.path.splitext(plugin)
-                if name in ZMeter.OPTIONAL_PLUGINS and \
-                        not self.__config.has_key(name):
-                    continue
-
-                loaded_module = __import__( name ) 
+                        continue
+                    name, ext = os.path.splitext(plugin)
+                    if name in ZMeter.OPTIONAL_PLUGINS and \
+                            not self.__config.has_key(name):
+                        continue
+                    names.append(name)
+            except:
+                if self._platform['system'] == 'Windows':
+                    # py2exe
+                    names.extend(["cpu","disk","iostat",
+                                  "load","mem","net",
+                                  "process","system"])
+                    break
+                else:
+                    raise
+            
+        for name in names:
+            loaded_module = __import__( name ) 
                 
-                for comp in dir(loaded_module):
-                    mod = getattr(loaded_module, comp) 
-                    if type(mod) == type and issubclass(mod, Metric):
-                        inst = mod()
-                        inst.init(self._platform, self.__config, self.__logger)
-                        self.__plugins[name] = inst
+            for comp in dir(loaded_module):
+                mod = getattr(loaded_module, comp) 
+                if type(mod) == type and issubclass(mod, Metric):
+                    inst = mod()
+                    inst.init(self._platform, self.__config, self.__logger)
+                    self.__plugins[name] = inst
 
         self.__logger.info("Loaded Plugins: " + str(self.__plugins.keys()))
 
