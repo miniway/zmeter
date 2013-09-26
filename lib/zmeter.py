@@ -11,11 +11,15 @@ import signal
 import socket
 import struct
 import array
- 
+import urllib2
+import base64
+import string
 
 class ZMeter(object):
 
-    OPTIONAL_PLUGINS = ['mysql']
+    DEFAULT_PLUGINS = ["cpu","disk","iostat",
+                                  "load","mem","net",
+                                  "process","system"]
 
     def __init__(self,  endpoints = 'tcp://127.0.0.1:5555',
                         serializer = None,
@@ -56,21 +60,20 @@ class ZMeter(object):
                         or plugin.startswith('__init__'):
                         continue
                     name, ext = os.path.splitext(plugin)
-                    if name in ZMeter.OPTIONAL_PLUGINS and \
-                            not self.__config.has_key(name):
-                        continue
                     names.append(name)
             except:
                 if self._platform['system'] == 'Windows':
                     # py2exe
-                    names.extend(["cpu","disk","iostat",
-                                  "load","mem","net",
-                                  "process","system"])
+                    names.extend(ZMeter.DEFAULT_PLUGINS)
+                    names.extend('mssql', 'apache', 'tomcat')
                     break
                 else:
                     raise
             
         for name in names:
+            if name not in ZMeter.DEFAULT_PLUGINS and \
+                            not self.__config.has_key(name):
+                continue
             loaded_module = __import__( name ) 
                 
             for comp in dir(loaded_module):
@@ -80,6 +83,7 @@ class ZMeter(object):
                     inst.init(self._platform, self.__config, self.__logger)
                     self.__plugins[name] = inst
 
+        self.__logger.info("Plantform: " + str(self._platform))
         self.__logger.info("Loaded Plugins: " + str(self.__plugins.keys()))
 
     def loadZMQ(self, endpoints, identity, hwm):
@@ -108,7 +112,11 @@ class ZMeter(object):
             self._logger.error("Not Supported Platform %s" % system)
             return None
         inst.beforeFetch()
-        result = method()
+        try:
+            result = method()
+        except Exception, e:
+            self.__logger.exception("Exception at %s 'fetch'" % name)
+            return
         inst.afterFetch(result)
 
         return result
@@ -155,6 +163,7 @@ class ZMeter(object):
         cores = self.__parseCpuInfo()
         system = platform.system()
         pf = {
+            'ip'            : get_ips()[0],
             'system'        : system,
             'cores'         : len(cores)
         }
@@ -263,6 +272,37 @@ class Metric(object):
             except Exception, e:
                 self._logger.exception(args[0])
                 return None
+        finally:
+            signal.alarm(0)
+
+    def urlget(self, url, user = None, passwd = None):
+        headers = {
+            'User-Agent'    : 'ZAgent',
+            'Content-Type'  : 'application/x-www-form-urlencoded',
+            'Accept'        : 'text/html, */*'
+        }
+        try:
+            signal.signal(signal.SIGALRM, self.sigHandler)
+            signal.alarm(15)
+
+            if user:
+                #auth = urllib2.HTTPPasswordMgrWithDefaultRealm()
+                #auth.add_password(None, url, user, passwd)
+
+                #handler = urllib2.HTTPBasicAuthHandler(auth)
+
+                #opener = urllib2.build_opener(handler)
+
+                #urllib2.install_opener(opener)
+                #request = opener.open(url)
+                auth = base64.encodestring('%s:%s' % (user, passwd)).replace('\n', '')
+                headers["Authorization"] = "Basic %s" % auth
+
+            req = urllib2.Request(url, None, headers)
+            request = urllib2.urlopen(req)
+
+            response = request.read()
+            return response
         finally:
             signal.alarm(0)
 

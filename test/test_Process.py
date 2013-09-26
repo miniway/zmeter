@@ -28,5 +28,5 @@ class test_Process(unittest.TestCase):
         time.sleep(5)
         info = zm.fetch('process')
 
-        self.assertEquals(info['watch.0.count']> 1, True)
+        self.assertTrue(info['watch.0.count']> 0)
         self.assertEquals(info['watch.1.count'], 0)
