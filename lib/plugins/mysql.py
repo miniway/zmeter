@@ -12,9 +12,10 @@ class Mysql(zmeter.Metric):
         'Slow_queries'              : 'slow_queries',
         'Table_locks_waited'        : 'lock_waited',
         'Threads_connected'         : 'threads_connected',
+        'Connections'               : 'connections',
     }
     DELTA_ACCEPTS = {
-        'Connections'               : 'connections',
+        'Connections'               : "connections_ps",
     }
 
     def __init__(self):
@@ -56,6 +57,6 @@ class Mysql(zmeter.Metric):
                 self.__prev[col] = int(value)
                 if prev is None:
                     continue
-                stats[col] = int(value) - prev -1
+                stats[col] = round((int(value) - prev -1) / self._elapsed, 2)
             
         return stats

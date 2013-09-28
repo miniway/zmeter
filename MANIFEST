@@ -9,6 +9,7 @@ lib/plugins/iostat.py
 lib/plugins/load.py
 lib/plugins/mem.py
 lib/plugins/mysql.py
+lib/plugins/mssql.py
 lib/plugins/net.py
 lib/plugins/process.py
 lib/plugins/system.py
@@ -20,6 +21,7 @@ test/test_IoStat.py
 test/test_Load.py
 test/test_MEM.py
 test/test_Mysql.py
+test/test_Mssql.py
 test/test_Net.py
 test/test_Process.py
 test/test_System.py

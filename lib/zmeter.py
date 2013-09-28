@@ -65,7 +65,7 @@ class ZMeter(object):
                 if self._platform['system'] == 'Windows':
                     # py2exe
                     names.extend(ZMeter.DEFAULT_PLUGINS)
-                    names.extend('mssql', 'apache', 'tomcat')
+                    names.extend(('mssql', 'apache', 'tomcat'))
                     break
                 else:
                     raise
