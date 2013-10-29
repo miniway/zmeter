@@ -244,6 +244,7 @@ class Metric(object):
         self._elapsed = None
         self._last_updated = None
         self._now = None
+        self._shared = {}
 
     def beforeFetch(self):
         now = time.time()
@@ -260,7 +261,10 @@ class Metric(object):
 
     def execute(self, *args):
         try:
-            signal.signal(signal.SIGALRM, self.sigHandler)
+            old_handler = signal.signal(signal.SIGALRM, self.sigHandler)
+            if not old_handler: # previous call was not finished
+                self._logger.error("Already running command for %s" % args[0])
+                return None
             signal.alarm(15)
 
             try:

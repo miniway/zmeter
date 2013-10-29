@@ -25,28 +25,28 @@ class Process(zmeter.Metric):
 
         self.__prev = {}
         self.__cmdlines = {}
-        self.__watches = []
+        self.__watches = {}
 
     def __initWatch(self, stats):
-        watches = self._config.get('watch', [])
+        watches = self._config.get('watch', {})
     
-        for i in range(len(watches)):
-            stats['watch.%d.cpu' % i] = 0
-            stats['watch.%d.mem' % i] = 0
-            stats['watch.%d.count' % i] = 0
+        for k in watches.keys():
+            stats['watch.%s.cpu' % k] = 0
+            stats['watch.%s.mem' % k] = 0
+            stats['watch.%s.count' % k] = 0
 
         if self.__watches != watches:
-            stats['meta.watches'] = ','.join(watches)
+            stats['meta.watches'] = ','.join(map(lambda o: '%s:%s' % o, watches.items()))
             self.__watches = watches
             
         return watches;
 
     def __updateWatch(self, pid, cmdline, cpu_data, mem_data, stats):
-        for i, watch in enumerate(self.__watches):
+        for k, watch in self.__watches.items():
             if cmdline.find(watch) >= 0:
-                stats['watch.%d.cpu' % i] += cpu_data[pid]
-                stats['watch.%d.mem' % i] += mem_data[pid]
-                stats['watch.%d.count' % i] += 1
+                stats['watch.%s.cpu' % k] += cpu_data[pid]
+                stats['watch.%s.mem' % k] += mem_data[pid]
+                stats['watch.%s.count' % k] += 1
             
     def fetchLinux(self):
         cpu_data = {}
@@ -86,6 +86,7 @@ class Process(zmeter.Metric):
             self.__updateWatch(pid, cmdline, cpu_data, mem_data, stats)
 
         self.__sortStats(cpu_data, mem_data, stats)
+        self._shared['process'] = self.__prev
         return stats
     
     def __sortStats(self, cpu_data, mem_data, stats):
@@ -153,4 +154,5 @@ class Process(zmeter.Metric):
             mem_data[pid] = long(data.WorkingSetSize)
         
         self.__sortStats(cpu_data, mem_data, stats)
+        self._shared['process'] = self.__prev
         return stats
