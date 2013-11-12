@@ -49,14 +49,14 @@ class Mysql(zmeter.Metric):
                 continue
             col, value = kv
             if col in Mysql.ACCEPTS:
-                col = Mysql.ACCEPTS[col]
-                stats[col] = int(value)
-            elif col in Mysql.DELTA_ACCEPTS:
-                col = Mysql.DELTA_ACCEPTS[col]
-                prev = self.__prev.get(col)
-                self.__prev[col] = int(value)
+                key = Mysql.ACCEPTS[col]
+                stats[key] = int(value)
+            if col in Mysql.DELTA_ACCEPTS:
+                key = Mysql.DELTA_ACCEPTS[col]
+                prev = self.__prev.get(key)
+                self.__prev[key] = int(value)
                 if prev is None:
                     continue
-                stats[col] = round((int(value) - prev -1) / self._elapsed, 2)
+                stats[key] = round((int(value) - prev -1) / self._elapsed, 2)
             
         return stats

@@ -3,7 +3,7 @@
 from distutils.core import setup
 
 setup(name='zmeter',
-      version='0.1.6',
+      version='0.1.7',
       description='Send system metrics via ZeroMQ socket',
       author='Min Yu',
       author_email='miniway@gmail.com',
