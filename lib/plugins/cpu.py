@@ -10,6 +10,11 @@ class Cpu(zmeter.Metric):
         self.__re_header = re.compile(r'%(\w+)')
         self.__re_value = re.compile(r'\d+\.\d+')
 
+    def _fixName(self, name):
+        if name == 'user':
+            return 'usr'
+        return name
+
     def fetchLinux(self):
         result = self.execute('mpstat', '-P', 'ALL', '1', '1')
 
@@ -34,7 +39,7 @@ class Cpu(zmeter.Metric):
                 values = re.findall(self.__re_value, line)
                 if len(values) > len(names): # intrs/s
                     values = values[:len(names)]
-                stat = dict(map(lambda k,v: ('%s.%s' % (cpu, k), round(float(v),2)), names, values))
+                stat = dict(map(lambda k,v: ('%s.%s' % (cpu, _fixName(k)), round(float(v),2)), names, values))
                 stat['%s.used' % cpu ] = round(100.0 - stat['%s.idle' % cpu], 2)
                 stats.update(stat)
 
