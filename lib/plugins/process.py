@@ -53,6 +53,7 @@ class Process(zmeter.Metric):
         mem_data = {}
         stats = {}
         watches = self.__initWatch(stats);
+        count = 0
     
         for pid in os.listdir('/proc/'):
             if not pid.isdigit():
@@ -71,6 +72,7 @@ class Process(zmeter.Metric):
             name = values[Process.COMM][1:-1]
             cmdline = self.__getCmdline(pid, name)
             value = (current, cmdline, self._now)
+            count += 1
 
 
             if not previous:
@@ -87,6 +89,8 @@ class Process(zmeter.Metric):
 
         self.__sortStats(cpu_data, mem_data, stats)
         self._shared['process'] = self.__prev
+        stats['all.count'] = count
+
         return stats
     
     def __sortStats(self, cpu_data, mem_data, stats):
@@ -133,6 +137,7 @@ class Process(zmeter.Metric):
         mem_data = {}
         stats = {}
         watches = self.__initWatch(stats);
+        count = 0
 
         for data in self._wmi.Win32_Process():
             pid = data.ProcessId
@@ -142,6 +147,7 @@ class Process(zmeter.Metric):
             previous = self.__prev.get(pid)
 
             value = (current, cmdline, self._now)
+            count += 1
 
             if not previous:
                 self.__prev[pid] = value
@@ -155,4 +161,5 @@ class Process(zmeter.Metric):
         
         self.__sortStats(cpu_data, mem_data, stats)
         self._shared['process'] = self.__prev
+        stats['all.count'] = count
         return stats
