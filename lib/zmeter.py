@@ -209,13 +209,12 @@ class ZMeter(object):
 
 class Serializer(object):
     def __init__(self):
-        self.__ip = get_ips()[0]
+        pass
 
     def header(self, params = {}):
         ts_millis = long(time.time() * 1000)
         header = {
             'ts'    : ts_millis,
-            'ip'    : self.__ip,
         }
         header.update(params)
         return header
@@ -265,7 +264,7 @@ class Metric(object):
             if not old_handler: # previous call was not finished
                 self._logger.error("Already running command for %s" % args[0])
                 return None
-            signal.alarm(15)
+            signal.alarm(5)
 
             try:
                 proc = subprocess.Popen(args, stdout=subprocess.PIPE, close_fds=True)
