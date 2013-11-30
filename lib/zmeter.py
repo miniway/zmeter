@@ -121,9 +121,13 @@ class ZMeter(object):
 
         return result
 
-    def send(self, name, params = {}):
+    def send(self, name, params = {}, value = {}):
         try:
-            frames = self.__serializer.feed({name: self.fetch(name)}, params)
+            if not value:
+                data = { name : self.fetch(name)}
+            else:
+                data = { name : value }
+            frames = self.__serializer.feed(data, params)
         except Exception, e:
             self.__logger.exception("Exception at 'send'")
             return
