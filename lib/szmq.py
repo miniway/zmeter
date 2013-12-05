@@ -206,8 +206,6 @@ class IoThread(threading.Thread):
                     cmd, arg = self.__cmds.get()
                     if cmd == 'connect':
                         self.__sockets[arg.sock] = arg
-                        if not self.__send_bufs.has_key(arg):
-                            self.__send_bufs[arg] = Queue.Queue()
                         if not self.__recv_bufs.has_key(arg):
                             self.__recv_bufs[arg] = Queue.Queue()
                         self.__poller.register(arg.sock, Poller.POLLOUT)
@@ -335,6 +333,8 @@ class IoThread(threading.Thread):
         s.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         s.sock.setblocking(0)
         ret = s.sock.connect_ex((host, int(port)))
+        if not self.__send_bufs.has_key(s):
+            self.__send_bufs[s] = Queue.Queue()
         if ret == 0 or ret == errno.EINPROGRESS or ret == 10035: # errno.WSAEWOULDBLOCK
             self.__cmds.put(("connect", s))
             self.__pipe.write('C')
