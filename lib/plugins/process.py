@@ -94,9 +94,18 @@ class Process(zmeter.Metric):
         return stats
     
     def __sortStats(self, cpu_data, mem_data, stats):
-        values = sorted(cpu_data, key=cpu_data.get, reverse=True)
+        cpu_values = sorted(cpu_data, key=cpu_data.get, reverse=True)
+        mem_values = sorted(mem_data, key=mem_data.get, reverse=True)
         top = []
-        for pid in values[:10]:
+        top_pids = []
+        for pid in cpu_values[:10]:
+            top_pids.append(pid)
+        for pid in mem_values[:10]:
+            if pid in top_pids:
+                continue
+            top_pids.append(pid)
+
+        for pid in top_pids:
             cmdline = self.__prev[pid][1]
             top.append({ "pid"  : pid, 
                          "cpu"  : cpu_data[pid],

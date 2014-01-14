@@ -28,6 +28,9 @@ class Tomcat(zmeter.Metric):
         if self.__urls:
             return False
 
+        if not conf:
+            conf['port.tomcat'] = 80
+
         url_base = 'http://localhost:%d/manager/jmxproxy?qry='
         for k, v in conf.items():
             if k.startswith('jmxproxy_url.'):

@@ -30,6 +30,9 @@ class Apache(zmeter.Metric):
         if self.__urls:
             return False
 
+        if not conf:
+            conf['port.apache'] = 80
+
         url_base = 'http://localhost:%d/server-status/?auto'
         for k, v in conf.items():
             if k.startswith('status_url.'):
