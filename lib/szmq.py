@@ -144,13 +144,14 @@ class IoThread(threading.Thread):
         self.__handshaking = []
         self.__disconnected = []
 
-        self.__poller = Poller()
+        self.loadLogger("./", logging.INFO)
+
+        self.__poller = Poller(self.logger)
         self.__poller.register(self.__pipe, Poller.POLLIN)
         self.__sockets[self.__pipe] = self
         self.__cmds = Queue.Queue()
 
         self.__stop = False
-        self.loadLogger("./", logging.INFO)
 
     def stopped(self):
         return self.__stop
@@ -206,10 +207,13 @@ class IoThread(threading.Thread):
                     cmd, arg = self.__cmds.get()
                     if cmd == 'connect':
                         self.__sockets[arg.sock] = arg
+                        if not self.__send_bufs.has_key(arg):
+                            self.__send_bufs[arg] = Queue.Queue()
                         if not self.__recv_bufs.has_key(arg):
                             self.__recv_bufs[arg] = Queue.Queue()
                         self.__poller.register(arg.sock, Poller.POLLOUT)
                         #self.__connecting.append(arg.sock)
+                        self.logger.info("Register Connect")
                     elif cmd == 'disconnect':
                         self.__disconnect(arg.sock)
                     elif cmd == 'send':
@@ -225,12 +229,13 @@ class IoThread(threading.Thread):
                 data = fo.recv(65536)
             except socket.error, e:
                 if e.args[0] in [errno.ECONNRESET, errno.ECONNREFUSED]:
+                    self.logger.exception("Error at Read")
                     data = None
                 else:
                     raise
 
             if not data:
-                self.logger.info("Disconnected")
+                self.logger.info("Disconnected at Read")
                 self.__disconnect(fo)
                 self.startConnect(sock)
                 return
@@ -276,10 +281,11 @@ class IoThread(threading.Thread):
                 except socket.error, e:
                     if e.args[0] in [errno.ECONNRESET, errno.ECONNREFUSED]:
                        sent = -1
+                       self.logger.exception("Error at Send")
                     else:
                        raise
                 if sent < 0:
-                    self.logger.info("Disconnected")
+                    self.logger.info("Disconnected at Send")
                     self.__disconnect(fo)
                     self.startConnect(sock)
                     return
@@ -320,6 +326,7 @@ class IoThread(threading.Thread):
                 self.__retry_at = time.time()
 
     def startConnect(self, s):
+        self.logger.info("Start Connect " + s.endpoint)
         parsed = urlparse(s.endpoint)
         assert parsed[0] == 'tcp'
         if sys.version_info < (2,6):
@@ -333,18 +340,18 @@ class IoThread(threading.Thread):
         s.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         s.sock.setblocking(0)
         ret = s.sock.connect_ex((host, int(port)))
-        if not self.__send_bufs.has_key(s):
-            self.__send_bufs[s] = Queue.Queue()
         if ret == 0 or ret == errno.EINPROGRESS or ret == 10035: # errno.WSAEWOULDBLOCK
             self.__cmds.put(("connect", s))
             self.__pipe.write('C')
+        else:
+            self.logger.info("Connect Fail. ErrorCode " + ret)
 
         return ret
 
     def __disconnect(self, fo):
         if fo is None:
             return
-        self.logger.debug('Disconnect')
+        self.logger.info('Processing disconnect')
         sock = self.__sockets[fo]
         sock.sock = None
         sock.connected = False
@@ -353,6 +360,7 @@ class IoThread(threading.Thread):
         #del self.__recv_bufs[fo]
         self.__poller.unregister(fo, Poller.POLLIN | Poller.POLLOUT)
         fo.close()
+        self.logger.info('Closed Socket')
 
     def disconnect(self, s):
         if self.__stop:
@@ -432,9 +440,10 @@ class Poller(object):
     POLLOUT = 2
     POLLERR = 4
 
-    def __init__(self):
+    def __init__(self, logger):
         self.__epoll = None
         self.__poll = None
+        self.logger = logger
 
         if hasattr(select,'epoll'):
             self.__epoll = select.epoll()
@@ -520,7 +529,7 @@ class Poller(object):
     def poll(self, timeout):
         result = []
         if self.__epoll:
-            for fd, event in self.__epoll.poll(timeout / 1000):
+            for fd, event in self.__epoll.poll(timeout / 1000.0):
 
                 result_event = 0
                 if event & select.EPOLLIN:
@@ -541,7 +550,7 @@ class Poller(object):
                 result.append((self.__reverse[fd], result_event))
 
         elif self.__poll:
-            for fd, event in self.__poll.poll(timeout / 1000):
+            for fd, event in self.__poll.poll(timeout):
 
                 result_event = 0
                 if event & select.POLLIN:
@@ -561,6 +570,7 @@ class Poller(object):
                     raise Exception("Unhandled Event " + str(event))
                 result.append((self.__reverse[fd], result_event))
         else:
+            timeout = 1.0 if timeout < 0 else timeout / 1000.0
             read_target = []
             write_target = []
             pipes = []
@@ -574,7 +584,7 @@ class Poller(object):
                     write_target.append(f)
             
             if read_target or write_target:
-                r, w, e = select.select(read_target, write_target,[], timeout/1000)
+                r, w, e = select.select(read_target, write_target,[], timeout)
             else:
                 r, w, e = [],[],[]
             
