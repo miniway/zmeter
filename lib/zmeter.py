@@ -265,9 +265,9 @@ class Metric(object):
     def execute(self, *args):
         try:
             old_handler = signal.signal(signal.SIGALRM, self.sigHandler)
-            if not old_handler: # previous call was not finished
-                self._logger.error("Already running command for %s" % args[0])
-                return None
+            #if not old_handler: # previous call was not finished
+            #    self._logger.error("Already running command for %s" % args[0])
+            #    return None
             signal.alarm(5)
 
             try:

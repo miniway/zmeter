@@ -71,7 +71,7 @@ class Tomcat(zmeter.Metric):
                     stat[key] = value
                     self.__prev[key] = value
 
-                    if prev:
+                    if prev is not None:
                         diffs[key] = value - prev
 
             if diffs:
