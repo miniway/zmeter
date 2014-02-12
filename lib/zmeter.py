@@ -300,7 +300,7 @@ class Metric(object):
 
         result = '' 
         try:
-            proc = subprocess.Popen(map(lambda s: str(s), self.args), 
+            proc = subprocess.Popen(map(lambda s: str(s), args), 
                                     stdout=subprocess.PIPE, 
                                     stderr=subprocess.PIPE, 
                                     close_fds=close_fds)

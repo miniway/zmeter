@@ -207,10 +207,6 @@ class IoThread(threading.Thread):
                     cmd, arg = self.__cmds.get()
                     if cmd == 'connect':
                         self.__sockets[arg.sock] = arg
-                        if not self.__send_bufs.has_key(arg):
-                            self.__send_bufs[arg] = Queue.Queue()
-                        if not self.__recv_bufs.has_key(arg):
-                            self.__recv_bufs[arg] = Queue.Queue()
                         self.__poller.register(arg.sock, Poller.POLLOUT)
                         #self.__connecting.append(arg.sock)
                         self.logger.info("Register Connect")
@@ -327,6 +323,10 @@ class IoThread(threading.Thread):
 
     def startConnect(self, s):
         self.logger.info("Start Connect " + s.endpoint)
+        if not self.__send_bufs.has_key(s):
+            self.__send_bufs[s] = Queue.Queue()
+        if not self.__recv_bufs.has_key(s):
+            self.__recv_bufs[s] = Queue.Queue()
         parsed = urlparse(s.endpoint)
         assert parsed[0] == 'tcp'
         if sys.version_info < (2,6):
