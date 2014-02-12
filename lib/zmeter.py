@@ -14,6 +14,7 @@ import array
 import urllib2
 import base64
 import string
+import threading
 
 class ZMeter(object):
 
@@ -232,6 +233,25 @@ class JsonSerializer(Serializer):
         import json
         return [json.dumps(self.header(params)), json.dumps(body)]
 
+class ThreadRunner(threading.Thread):
+    def __init__(self, func, *args, **kwargs):
+        super(ThreadRunner, self).__init__()
+        self.__args = args
+        self.__func = func
+        self.__kwargs = kwargs
+        self.__timeout = False
+        self.__result = None
+        
+    def run(self):
+        self.__timeout = True
+        self.__result = self.__func(*self.__args, **self.__kwargs)
+        self.__timeout = False
+
+    def result(self):
+        return self.__result
+
+    def timeout(self):
+        return self.__timeout
 
 class Metric(object):
 
@@ -263,45 +283,54 @@ class Metric(object):
         self._logger.error("Must Override fetch or fetch%s" % self._system)
 
     def execute(self, *args):
-        try:
-            old_handler = signal.signal(signal.SIGALRM, self.sigHandler)
-            #if not old_handler: # previous call was not finished
-            #    self._logger.error("Already running command for %s" % args[0])
-            #    return None
-            signal.alarm(5)
+        runner = ThreadRunner(self._execute, *args)
+        runner.start()
+        runner.join(3)
+        if runner.timeout():
+            self._logger.error("Timeout at Execute %s", ' '.join(args))
+            return None
+        else:
+            out, err = runner.result()
+            return out
 
-            try:
-                proc = subprocess.Popen(args, stdout=subprocess.PIPE, close_fds=True)
-                return proc.communicate()[0]
-            except OSError, e:
-                self._logger.exception(args[0])
-                return None
-            except Exception, e:
-                self._logger.exception(args[0])
-                return None
-        finally:
-            signal.alarm(0)
+    def _execute(self, *args):
+        import subprocess
+        import platform
+        close_fds = True if platform.system() == 'Linux' else False
+
+        result = '' 
+        try:
+            proc = subprocess.Popen(map(lambda s: str(s), self.args), 
+                                    stdout=subprocess.PIPE, 
+                                    stderr=subprocess.PIPE, 
+                                    close_fds=close_fds)
+            result = proc.communicate()
+        except OSError, e:
+            self._logger.exception(args[0])
+            result = '',str(e)
+        except Exception, e:
+            self._logger.exception(args[0])
+            result = '',str(e) 
+        return result
 
     def urlget(self, url, user = None, passwd = None):
+        runner = ThreadRunner(self._urlget, url, user, passwd)
+        runner.start()
+        runner.join(3)
+        if runner.timeout():
+            self._logger.error("Timeout at URL fetch %s", ' '.join(url))
+            return None
+        else:
+            return runner.result()
+        
+    def _urlget(self, url, user = None, passwd = None):
         headers = {
             'User-Agent'    : 'ZAgent',
             'Content-Type'  : 'application/x-www-form-urlencoded',
             'Accept'        : 'text/html, */*'
         }
         try:
-            signal.signal(signal.SIGALRM, self.sigHandler)
-            signal.alarm(15)
-
             if user:
-                #auth = urllib2.HTTPPasswordMgrWithDefaultRealm()
-                #auth.add_password(None, url, user, passwd)
-
-                #handler = urllib2.HTTPBasicAuthHandler(auth)
-
-                #opener = urllib2.build_opener(handler)
-
-                #urllib2.install_opener(opener)
-                #request = opener.open(url)
                 auth = base64.encodestring('%s:%s' % (user, passwd)).replace('\n', '')
                 headers["Authorization"] = "Basic %s" % auth
 
@@ -310,11 +339,9 @@ class Metric(object):
 
             response = request.read()
             return response
-        finally:
-            signal.alarm(0)
-
-    def sigHandler(self, signum, frame):
-        raise Exception('Timeout')
+        except:
+            self._logger.exception(url)
+            return None
 
 class StdoutLogger(object):
 
