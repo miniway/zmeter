@@ -570,7 +570,10 @@ class Poller(object):
                     raise Exception("Unhandled Event " + str(event))
                 result.append((self.__reverse[fd], result_event))
         else:
-            timeout = 1.0 if timeout < 0 else timeout / 1000.0
+            if timeout < 0:
+                timeout = 1.0
+            else:
+                timeout = timeout / 1000.0
             read_target = []
             write_target = []
             pipes = []

@@ -296,7 +296,10 @@ class Metric(object):
     def _execute(self, *args):
         import subprocess
         import platform
-        close_fds = True if platform.system() == 'Linux' else False
+        if platform.system() == 'Linux':
+            close_fds = True
+        else:
+            close_fds = False
 
         result = '' 
         try:
