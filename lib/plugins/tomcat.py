@@ -59,6 +59,8 @@ class Tomcat(zmeter.Metric):
             for item in items:
                 url = url_base + urllib.quote(item, '*')
                 response = self.urlget(url, conf.get('user.%s' % name), conf.get('pass.%s' % name))
+                if not response:
+                    continue
 
                 for i, line in enumerate(response.split('\n')):
                     cols = line.split(': ')
