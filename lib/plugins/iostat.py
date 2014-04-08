@@ -69,7 +69,7 @@ class IoStat(zmeter.Metric):
     def fetchWindows(self):
         stats = {}
         devices = []
-        for data in self._wmi.Win32_PerfFormattedData_PerfDisk_PhysicalDisk():
+        for data in self._wmi.InstancesOf("Win32_PerfFormattedData_PerfDisk_PhysicalDisk"):
             if data.Name == '_Total':
                 continue
             idx, device = data.Name.split(" ")

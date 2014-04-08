@@ -37,10 +37,10 @@ class Mem(zmeter.Metric):
     def fetchWindows(self):
         stats = {}
         if not self.__mem.has_key('MemTotal'):
-            data = self._wmi.Win32_OperatingSystem()[0]
+            data = self._wmi.InstancesOf("Win32_OperatingSystem")[0]
             self.__mem['MemTotal'] = long(data.TotalVisibleMemorySize) * 1024
             
-        data = self._wmi.Win32_PerfFormattedData_PerfOS_Memory()[0]
+        data = self._wmi.InstancesOf("Win32_PerfFormattedData_PerfOS_Memory")[0]
 
         stats = {
             'total'     : self.__mem['MemTotal'],

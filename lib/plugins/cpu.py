@@ -47,7 +47,7 @@ class Cpu(zmeter.Metric):
     
     def fetchWindows(self):
         stats = {}
-        for data in self._wmi.Win32_PerfFormattedData_Counters_ProcessorInformation():
+        for data in self._wmi.InstancesOf("Win32_PerfFormattedData_Counters_ProcessorInformation"):
             if data.Name == '_Total':
                 cpu = 'all'
             else:

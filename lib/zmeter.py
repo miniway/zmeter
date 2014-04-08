@@ -178,10 +178,11 @@ class ZMeter(object):
                 'page_size'     : os.sysconf('SC_PAGE_SIZE'),
             })
         elif system == 'Windows':
-            import wmi
-            c = wmi.WMI()
+            import win32com.client
+            c = win32com.client.GetObject("winmgmts:")
             nic = []
-            for inf in c.Win32_NetworkAdapterConfiguration(IPEnabled=1):
+            for inf in c.ExecQuery(
+                "select * from Win32_NetworkAdapterConfiguration where IPEnabled=1"):
                 nic.append(inf.Description)
             pf.update({
                 'wmi'           : c,
@@ -204,9 +205,9 @@ class ZMeter(object):
                 else:
                     core[kv[0].strip()] = kv[1].strip()
         elif system == 'Windows':
-            import wmi
-            c = wmi.WMI()
-            for cpu in c.Win32_Processor():
+            import win32com.client
+            c = win32com.client.GetObject("winmgmts:")
+            for cpu in c.InstancesOf("Win32_Processor"):
                 cores.extend(map(lambda n: {cpu.Name : n}, range(cpu.NumberOfCores)))
         return cores
         
@@ -268,6 +269,7 @@ class Metric(object):
         self._last_updated = None
         self._now = None
         self._shared = {}
+        self._spent = 0L
 
     def beforeFetch(self):
         now = time.time()
@@ -278,6 +280,7 @@ class Metric(object):
     def afterFetch(self, result):
         if result:
             self._last_updated = time.time()
+        self._spent = time.time() - self._now
 
     def fetch(self):
         self._logger.error("Must Override fetch or fetch%s" % self._system)
@@ -391,9 +394,10 @@ def get_interfaces():
             lst.append((name, format_ip(ip)))
         return lst
     elif system == 'Windows':
-        import wmi
-        c = wmi.WMI()
+        import win32com.client
+        c = win32com.client.GetObject("winmgmts:")
         lst = []
-        for inf in c.Win32_NetworkAdapterConfiguration(IPEnabled=1):
+        for inf in c.ExecQuery(
+                "select * from Win32_NetworkAdapterConfiguration where IPEnabled=1"):
             lst.append((inf.Description, inf.IPAddress[0]))
         return lst

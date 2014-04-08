@@ -65,7 +65,8 @@ class Disk(zmeter.Metric):
         stats = {}
         mounts = []
         idx = 0
-        for data in self._wmi.Win32_LogicalDisk (DriveType=3):
+        for data in self._wmi.ExecQuery(
+                "select * from Win32_LogicalDisk where DriveType=3"):
             mount = data.Name;
             data = {
                 'total'     : long(data.Size),

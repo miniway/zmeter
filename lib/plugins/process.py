@@ -148,7 +148,7 @@ class Process(zmeter.Metric):
         watches = self.__initWatch(stats);
         count = 0
 
-        for data in self._wmi.Win32_Process():
+        for data in self._wmi.InstancesOf("Win32_Process"):
             pid = data.ProcessId
             cmdline = data.CommandLine or 'Idle'
             self.__cmdlines[pid] = cmdline

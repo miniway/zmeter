@@ -68,7 +68,7 @@ class Net(zmeter.Metric):
     def fetchWindows(self):
 
         stats = {}
-        for data in self._wmi.Win32_PerfFormattedData_Tcpip_NetworkInterface():
+        for data in self._wmi.InstancesOf("Win32_PerfFormattedData_Tcpip_NetworkInterface"):
             if data.Name not in self._nic:
                 continue
             idx = self._nic.index(data.Name)

@@ -28,7 +28,7 @@ class Load(zmeter.Metric):
 
     def fetchWindows(self):
 
-        data = self._wmi.Win32_PerfFormattedData_PerfOS_System()[0]
+        data = self._wmi.InstancesOf("Win32_PerfFormattedData_PerfOS_System")[0]
         stats = {
             'load'      : int(data.ProcessorQueueLength),
             'threads'   : int(data.Threads)

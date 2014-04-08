@@ -130,12 +130,49 @@ class Pipe(object):
         os.close(self.__r)
         os.close(self.__w)
 
+class WinPipe(object):
+
+    def __init__(self):
+        self.__q = Queue.Queue()
+        self.__peek = None
+
+    def fileno(self):
+        return -1
+
+    def write(self, data):
+        self.__q.put(data)
+
+    def peek(self, tout):
+        if self.__peek is not None:
+            return True
+        try:
+            self.__peek = self.__q.get(True, tout)
+        except Queue.Empty:
+            self.__peek = None
+        if self.__peek is None:
+            return False
+        return True
+    
+    def recv(self):
+        if self.__peek:
+            data = self.__peek
+            self.__peek = None
+            return data
+        return self.__q.get(True)
+        
+    def close(self):
+        self.__q = None
+        
 class IoThread(threading.Thread):
 
 
     def __init__(self):
+        import platform
         threading.Thread.__init__(self)
-        self.__pipe = Pipe()
+        if platform.system() == 'Windows':
+            self.__pipe = WinPipe()
+        else:
+            self.__pipe = Pipe()
         self.__sockets = {}
         self.__send_bufs = {}
         self.__recv_bufs = {}
@@ -179,6 +216,7 @@ class IoThread(threading.Thread):
 
                 for fo, event in items:
                     self.handlePoll(fo, event)
+
         except Exception:
             self.logger.exception("Error at polling")
 
@@ -454,7 +492,7 @@ class Poller(object):
         self.__reverse = {}
         self.__test = 0
         pass
-
+    
     def close(self):
         if self.__epoll:
             self.__epoll.close()
@@ -528,6 +566,7 @@ class Poller(object):
 
     def poll(self, timeout):
         result = []
+        self.__retry = []
         if self.__epoll:
             for fd, event in self.__epoll.poll(timeout / 1000.0):
 
@@ -578,7 +617,7 @@ class Poller(object):
             write_target = []
             pipes = []
             for f, event in self.__events.items():
-                if isinstance(f, Pipe):
+                if isinstance(f, WinPipe):
                     pipes.append(f)
                     continue
                 if event & Poller.POLLIN:
@@ -588,6 +627,8 @@ class Poller(object):
             
             if read_target or write_target:
                 r, w, e = select.select(read_target, write_target,[], timeout)
+                if not w:
+                    e = write_target
             else:
                 r, w, e = [],[],[]
             
@@ -598,9 +639,13 @@ class Poller(object):
             for f in w:
                 result_event.setdefault(f, 0)
                 result_event[f] |= Poller.POLLOUT
+            for f in e:
+                result_event.setdefault(f, 0)
+                result_event[f] |= Poller.POLLERR
+
             if not result_event:
                 for p in pipes:
-                    if p.peek():
+                    if p.peek(timeout):
                         result_event[p] = Poller.POLLIN
             
             result = result_event.items()
