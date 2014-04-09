@@ -72,7 +72,11 @@ class IoStat(zmeter.Metric):
         for data in self._wmi.InstancesOf("Win32_PerfFormattedData_PerfDisk_PhysicalDisk"):
             if data.Name == '_Total':
                 continue
-            idx, device = data.Name.split(" ")
+            try:
+                idx, device = data.Name.split(" ")
+            except ValueError:
+                # unformatted disk
+                continue
             devices.append(device)
             stat = {
                 '%s.%%util' % idx : int(data.PercentDiskTime),
