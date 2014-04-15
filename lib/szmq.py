@@ -624,7 +624,7 @@ class Poller(object):
                     read_target.append(f)
                 if event & Poller.POLLOUT:
                     write_target.append(f)
-            
+
             if read_target or write_target:
                 r, w, e = select.select(read_target, write_target,[], timeout)
                 if not w:
@@ -643,10 +643,9 @@ class Poller(object):
                 result_event.setdefault(f, 0)
                 result_event[f] |= Poller.POLLERR
 
-            if not result_event:
-                for p in pipes:
-                    if p.peek(timeout):
-                        result_event[p] = Poller.POLLIN
+            for p in pipes:
+                if p.peek(0):
+                    result_event[p] = Poller.POLLIN
             
             result = result_event.items()
             
