@@ -138,10 +138,25 @@ class ZMeter(object):
         self.__inbox.send(frames[-1])
 
     def sendall(self, params = {}):
+        if runner.timeout():
+            self._logger.error("Timeout at Execute %s", ' '.join(args))
+            return None
+        else:
+            out, err = runner.result()
+            return out
         try:
+            runners = []
             data = {}
             for name in self.__plugins.keys():
-                stat = self.fetch(name)
+                runner = ThreadRunner(self.fetch, (name,))
+                runner.start()
+                runners.append(runner)
+            for runner in runners:
+                runner.join(5)
+                if runner.timeout():
+                    self._logger.error("Timeout at Execute %s", ' '.join(args))
+                    return None
+                stat, err = runner.result()
                 if stat:
                     data[name] = stat
             frames = self.__serializer.feed(data, params)
@@ -286,6 +301,14 @@ class Metric(object):
         self._logger.error("Must Override fetch or fetch%s" % self._system)
 
     def execute(self, *args):
+        out, err = self._execute(*args)
+        if err:
+            self._logger.error("Error at Execute %s : %s", ' '.join(args), err)
+            return None
+        else:
+            return out
+
+    def executeAsync(self, *args):
         runner = ThreadRunner(self._execute, *args)
         runner.start()
         runner.join(3)

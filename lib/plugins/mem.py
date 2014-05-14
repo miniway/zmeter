@@ -25,12 +25,14 @@ class Mem(zmeter.Metric):
             'cached'    : self.__mem['Cached'],
             'swap.total': self.__mem['SwapTotal'],
             'swap.free' : self.__mem['SwapFree'],
+            'used'      : self.__mem['Active'] + self.__mem['Unevictable']
         }
 
-        data['used'] = data['total'] - data['free']
         data['pused'] = round(data['used'] * 100.0 / data['total'], 2)
         data['swap.used'] = data['swap.total'] - data['swap.free']
         data['swap.pused'] = round(data['swap.used'] * 100.0 / data['total'], 2)
+
+        data = self._updateMeta(data)
 
         return data
 
@@ -49,9 +51,18 @@ class Mem(zmeter.Metric):
             'swap.total': long(data.CommitLimit),
             'swap.pused' : int(data.PercentCommittedBytesInUse),
         }
-        stats['swap.free'] = stats['swap.total'] - int(data.CommittedBytes)
         stats['used'] = stats['total'] - stats['free']
         stats['pused'] = round(stats['used'] * 100.0 / stats['total'], 2)
+        stats['swap.free'] = stats['swap.total'] - int(data.CommittedBytes)
         stats['swap.used'] = stats['swap.total'] - stats['swap.free']
 
+        stats = self._updateMeta(stats)
+
         return stats
+
+    def _updateMeta(self, data):
+        if self.__mem.get('meta.total') != data['total']: 
+            data['meta.total'] = data['total']
+            self.__mem['meta.total'] = data['total']
+
+        return data

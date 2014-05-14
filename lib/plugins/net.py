@@ -69,9 +69,11 @@ class Net(zmeter.Metric):
 
         stats = {}
         for data in self._wmi.InstancesOf("Win32_PerfFormattedData_Tcpip_NetworkInterface"):
-            if data.Name not in self._nic:
+            ifname = re.sub('_(\d+)', r'#\1', data.Name)
+            try:
+                idx = self._nic.index(ifname)
+            except ValueError:
                 continue
-            idx = self._nic.index(data.Name)
             stat = {
                 '%d.in.bps'  % idx : long(data.BytesReceivedPerSec),
                 '%d.out.bps' % idx : long(data.BytesSentPerSec),
@@ -81,7 +83,4 @@ class Net(zmeter.Metric):
                 '%d.out.errs'% idx : long(data.PacketsOutboundErrors),
             }
             stats.update(stat)
-        if self.__ifs != self._nic:
-            stats['meta.ifs'] = ','.join(self._nic)
-            self.__ifs = self._nic
         return stats

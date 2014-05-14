@@ -16,7 +16,7 @@ class Cpu(zmeter.Metric):
         return name
 
     def fetchLinux(self):
-        result = self.execute('mpstat', '-P', 'ALL', '1', '1')
+        result = self.execute('mpstat', '-P', 'ALL', '3', '1')
 
         if not result:
             return None

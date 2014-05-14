@@ -80,16 +80,16 @@ class IoStat(zmeter.Metric):
             devices.append(device)
             stat = {
                 '%s.%%util' % idx : int(data.PercentDiskTime),
-                '%s.iowait' % idx : int(data.AvgDiskSecPerTransfer),
-                '%s.qu-sz' % idx : int(data.CurrentDiskQueueLength),
+                '%s.await' % idx : long(data.AvgDiskSecPerTransfer) * 1000,
+                '%s.avgrq-sz' % idx : int(data.AvgDiskBytesPerTransfer),
                 '%s.avgqu-sz' % idx : int(data.AvgDiskQueueLength),
-                '%s.svctm' % idx : int(data.AvgDiskSecPerTransfer) * 1000, # milli seconds
-                '%s.r/s' % idx : int(data.DiskReadsPerSec),
-                '%s.w/s' % idx : int(data.DiskWritesPerSec),
-                '%s.rrpm/s' % idx : int(data.DiskReadsPerSec),
-                '%s.wrpm/s' % idx : int(data.DiskWritesPerSec),
-                '%s.rkB/s' % idx : round(float(data.DiskReadBytesPerSec) / 1024.0),
-                '%s.wkB/s' % idx : round(float(data.DiskWriteBytesPerSec) / 1024.0),
+                '%s.svctm' % idx : long(data.AvgDiskSecPerTransfer) * 1000, # milli seconds
+                '%s.read.req' % idx : int(data.DiskReadsPerSec),
+                '%s.write.req' % idx : int(data.DiskWritesPerSec),
+                '%s.rrpm' % idx : int(data.DiskReadsPerSec),
+                '%s.wrpm' % idx : int(data.DiskWritesPerSec),
+                '%s.read' % idx : round(float(data.DiskReadBytesPerSec) / 1024.0),
+                '%s.write' % idx : round(float(data.DiskWriteBytesPerSec) / 1024.0),
 
             }
             stats.update(stat)
