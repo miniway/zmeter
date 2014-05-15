@@ -53,6 +53,8 @@ class Apache(zmeter.Metric):
 
         for name, url in self.__urls.items():
             response = self.urlget(url, conf.get('user.%s' % name), conf.get('pass.%s' % name))
+            if not response:
+                continue 
 
             diffs = {}
 

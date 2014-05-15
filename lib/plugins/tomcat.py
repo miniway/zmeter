@@ -56,11 +56,13 @@ class Tomcat(zmeter.Metric):
         diffs = {}
 
         for name, url_base in self.__urls.items():
+            fail = False
             for item in items:
                 url = url_base + urllib.quote(item, '*')
                 response = self.urlget(url, conf.get('user.%s' % name), conf.get('pass.%s' % name))
                 if not response:
-                    continue
+                    fail = True
+                    break
 
                 for i, line in enumerate(response.split('\n')):
                     cols = line.split(': ')
@@ -75,6 +77,9 @@ class Tomcat(zmeter.Metric):
 
                     if prev is not None:
                         diffs[key] = value - prev
+
+            if fail:
+                continue
 
             if diffs:
                 stat['%s.rps' % name] = round((diffs['%s.reqs' % name] - len(items)) / self._elapsed, 2)

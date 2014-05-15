@@ -138,27 +138,30 @@ class ZMeter(object):
         self.__inbox.send(frames[-1])
 
     def sendall(self, params = {}):
-        if runner.timeout():
-            self._logger.error("Timeout at Execute %s", ' '.join(args))
-            return None
-        else:
-            out, err = runner.result()
-            return out
         try:
             runners = []
             data = {}
-            for name in self.__plugins.keys():
-                runner = ThreadRunner(self.fetch, (name,))
+            for name, inst in self.__plugins.items():
+                runner = ThreadRunner(self.fetch, name, stop=inst.stop)
                 runner.start()
                 runners.append(runner)
-            for runner in runners:
-                runner.join(5)
-                if runner.timeout():
-                    self._logger.error("Timeout at Execute %s", ' '.join(args))
-                    return None
-                stat, err = runner.result()
-                if stat:
-                    data[name] = stat
+            start = time.time()
+            while runner:
+                alive = []
+                for runner in runners:
+                    if runner.isAlive():
+                        if time.time() - start >= 5.0:
+                            runner.stop()
+                            self.__logger.error("Timeout at Fetch %s", name)
+                        else:
+                            runner.join(0.5)
+                            alive.append(runner)
+                    else:
+                        stat = runner.result()
+                        if stat:
+                            data[name] = stat
+                runner = alive
+
             frames = self.__serializer.feed(data, params)
         except Exception, e:
             self.__logger.exception("Exception at 'sendall'")
@@ -246,7 +249,10 @@ class JsonSerializer(Serializer):
         pass
 
     def feed(self, body, params):
-        import json
+        try:
+            import json
+        except ImportError:
+            import simplejson as json
         return [json.dumps(self.header(params)), json.dumps(body)]
 
 class ThreadRunner(threading.Thread):
@@ -254,20 +260,22 @@ class ThreadRunner(threading.Thread):
         super(ThreadRunner, self).__init__()
         self.__args = args
         self.__func = func
+        self.__stop = kwargs.pop('stop', None)
         self.__kwargs = kwargs
-        self.__timeout = False
         self.__result = None
         
     def run(self):
-        self.__timeout = True
         self.__result = self.__func(*self.__args, **self.__kwargs)
-        self.__timeout = False
+
+    def stop(self):
+        if self.__stop:
+            self.__stop()
 
     def result(self):
         return self.__result
 
     def timeout(self):
-        return self.__timeout
+        return self.isAlive()
 
 class Metric(object):
 
@@ -285,6 +293,7 @@ class Metric(object):
         self._now = None
         self._shared = {}
         self._spent = 0L
+        self._proc = None
 
     def beforeFetch(self):
         now = time.time()
@@ -296,9 +305,14 @@ class Metric(object):
         if result:
             self._last_updated = time.time()
         self._spent = time.time() - self._now
+        self._proc = None
 
     def fetch(self):
         self._logger.error("Must Override fetch or fetch%s" % self._system)
+
+    def stop(self):
+        if self._proc is not None:
+            self._proc.terminate()
 
     def execute(self, *args):
         out, err = self._execute(*args)
@@ -320,8 +334,6 @@ class Metric(object):
             return out
 
     def _execute(self, *args):
-        import subprocess
-        import platform
         if platform.system() == 'Linux':
             close_fds = True
         else:
@@ -329,11 +341,11 @@ class Metric(object):
 
         result = '' 
         try:
-            proc = subprocess.Popen(map(lambda s: str(s), args), 
+            self._proc = subprocess.Popen(map(lambda s: str(s), args), 
                                     stdout=subprocess.PIPE, 
                                     stderr=subprocess.PIPE, 
                                     close_fds=close_fds)
-            result = proc.communicate()
+            result = self._proc.communicate()
         except OSError, e:
             self._logger.exception(args[0])
             result = '',str(e)
@@ -343,6 +355,9 @@ class Metric(object):
         return result
 
     def urlget(self, url, user = None, passwd = None):
+        return self._urlget(url, user, passwd)
+
+    def urlgetAsync(self, url, user = None, passwd = None):
         runner = ThreadRunner(self._urlget, url, user, passwd)
         runner.start()
         runner.join(3)
@@ -364,7 +379,11 @@ class Metric(object):
                 headers["Authorization"] = "Basic %s" % auth
 
             req = urllib2.Request(url, None, headers)
-            request = urllib2.urlopen(req)
+            if sys.version_info < (2,6):
+                socket.setdefaulttimeout(3)
+                request = urllib2.urlopen(req)
+            else:
+                request = urllib2.urlopen(req, timeout=3)
 
             response = request.read()
             return response
