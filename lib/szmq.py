@@ -352,7 +352,7 @@ class IoThread(threading.Thread):
 
         if event & Poller.POLLERR:
             if sock.connected:
-                raise Exception("Poll Error")
+                self.logger.info("Already Connected")
             else:
                 self.__disconnect(fo)
                 self.__disconnected.append(sock)
