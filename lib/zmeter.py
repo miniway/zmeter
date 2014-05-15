@@ -144,18 +144,18 @@ class ZMeter(object):
             for name, inst in self.__plugins.items():
                 runner = ThreadRunner(self.fetch, name, stop=inst.stop)
                 runner.start()
-                runners.append(runner)
+                runners.append((name, runner))
             start = time.time()
             while runner:
                 alive = []
-                for runner in runners:
+                for name, runner in runners:
                     if runner.isAlive():
                         if time.time() - start >= 5.0:
                             runner.stop()
                             self.__logger.error("Timeout at Fetch %s", name)
                         else:
                             runner.join(0.5)
-                            alive.append(runner)
+                            alive.append((name, runner))
                     else:
                         stat = runner.result()
                         if stat:
@@ -196,14 +196,11 @@ class ZMeter(object):
                 'page_size'     : os.sysconf('SC_PAGE_SIZE'),
             })
         elif system == 'Windows':
-            import win32com.client
-            c = win32com.client.GetObject("winmgmts:")
             nic = []
-            for inf in c.ExecQuery(
+            for inf in get_wmi().ExecQuery(
                 "select * from Win32_NetworkAdapterConfiguration where IPEnabled=1"):
                 nic.append(inf.Description)
             pf.update({
-                'wmi'           : c,
                 'nic'           : nic
             })
 
@@ -223,9 +220,7 @@ class ZMeter(object):
                 else:
                     core[kv[0].strip()] = kv[1].strip()
         elif system == 'Windows':
-            import win32com.client
-            c = win32com.client.GetObject("winmgmts:")
-            for cpu in c.InstancesOf("Win32_Processor"):
+            for cpu in get_wmi().InstancesOf("Win32_Processor"):
                 cores.extend(map(lambda n: {cpu.Name : n}, range(cpu.NumberOfCores)))
         return cores
         
@@ -294,14 +289,18 @@ class Metric(object):
         self._shared = {}
         self._spent = 0L
         self._proc = None
+        
 
     def beforeFetch(self):
         now = time.time()
         if self._now:
             self._elapsed = now - self._now
         self._now = now
+        self._wmi = get_wmi()
+
 
     def afterFetch(self, result):
+        release_wmi()
         if result:
             self._last_updated = time.time()
         self._spent = time.time() - self._now
@@ -407,6 +406,18 @@ class StdoutLogger(object):
     warn = write
     error = write
 
+def get_wmi():
+    if platform.system() == 'Windows':
+        import pythoncom
+        import win32com.client
+        pythoncom.CoInitialize()
+        return win32com.client.GetObject("winmgmts:")
+
+def release_wmi():
+    if platform.system() == 'Windows':
+        import pythoncom
+        pythoncom.CoUninitialize()
+        
 def get_ips():
     return [ip for name, ip in get_interfaces() if name != 'lo' ]
 
@@ -439,7 +450,7 @@ def get_interfaces():
         import win32com.client
         c = win32com.client.GetObject("winmgmts:")
         lst = []
-        for inf in c.ExecQuery(
+        for inf in get_wmi().ExecQuery(
                 "select * from Win32_NetworkAdapterConfiguration where IPEnabled=1"):
             lst.append((inf.Description, inf.IPAddress[0]))
         return lst
