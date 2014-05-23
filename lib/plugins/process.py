@@ -148,11 +148,11 @@ class Process(zmeter.Metric):
         watches = self.__initWatch(stats);
         count = 0
 
-        for data in self._wmi.InstancesOf("Win32_Process"):
-            pid = data.ProcessId
-            cmdline = data.CommandLine or 'Idle'
+        for data in self._wmi.InstancesOf("Win32_PerfFormattedData_PerfProc_Process"):
+            pid = data.IDProcess
+            cmdline = data.Name or 'Idle'
             self.__cmdlines[pid] = cmdline
-            current = long(getattr(data,'UserModeTime',0)) + long(getattr(data,'KernelModeTime',0)) # 100 nanos
+            current = long(data.PercentProcessorTime)
             previous = self.__prev.get(pid)
 
             value = (current, cmdline, self._now)
@@ -164,9 +164,8 @@ class Process(zmeter.Metric):
 
             self.__prev[pid] = value
 
-            usage = current - previous[0]
-            cpu_data[pid] = round(usage * 100 / 10000000 / self._cores /self._elapsed, 2)
-            mem_data[pid] = long(data.WorkingSetSize)
+            cpu_data[pid] = current
+            mem_data[pid] = long(data.WorkingSet)
         
         self.__sortStats(cpu_data, mem_data, stats)
         self._shared['process'] = self.__prev

@@ -30,7 +30,8 @@ class Load(zmeter.Metric):
 
         data = self._wmi.InstancesOf("Win32_PerfFormattedData_PerfOS_System")[0]
         stats = {
-            'load'      : int(data.ProcessorQueueLength),
+            'avg1'      : int(data.ProcessorQueueLength),
+            'running'   : int(data.Processes)
             'threads'   : int(data.Threads)
         }
 

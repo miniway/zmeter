@@ -447,8 +447,6 @@ def get_interfaces():
             lst.append((name, format_ip(ip)))
         return lst
     elif system == 'Windows':
-        import win32com.client
-        c = win32com.client.GetObject("winmgmts:")
         lst = []
         for inf in get_wmi().ExecQuery(
                 "select * from Win32_NetworkAdapterConfiguration where IPEnabled=1"):
