@@ -434,6 +434,7 @@ def get_interfaces():
     system = platform.system()
     if system == 'Linux':
         import fcntl
+        dist = platform.system()
         outbytes = struct.unpack('iL', fcntl.ioctl(
             s.fileno(),
             0x8912,  # SIOCGIFCONF
@@ -441,7 +442,11 @@ def get_interfaces():
         ))[0]
         namestr = names.tostring()
         lst = []
-        for i in range(0, outbytes, 40):
+        if outbytes % 40 == 0:
+            offset = 40
+        else:
+            offset = 32
+        for i in range(0, outbytes, offset):
             name = namestr[i:i+16].split('\0', 1)[0]
             ip   = namestr[i+20:i+24]
             lst.append((name, format_ip(ip)))

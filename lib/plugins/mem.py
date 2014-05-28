@@ -25,7 +25,7 @@ class Mem(zmeter.Metric):
             'cached'    : self.__mem['Cached'],
             'swap.total': self.__mem['SwapTotal'],
             'swap.free' : self.__mem['SwapFree'],
-            'used'      : self.__mem['Active'] + self.__mem['Unevictable']
+            'used'      : self.__mem['Active'] + self.__mem.get('Unevictable',0)
         }
 
         data['pused'] = round(data['used'] * 100.0 / data['total'], 2)
