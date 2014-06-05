@@ -9,6 +9,7 @@ class Disk(zmeter.Metric):
         super(Disk, self).__init__()
 
         self.__mounts = []
+        self.__meta = {}
 
     def fetchLinux(self):
         
@@ -31,7 +32,7 @@ class Disk(zmeter.Metric):
                 long_fs = None
 
             fs, total, used, available, pused, mount = cols
-            if not fs.startswith('/'):
+            if fs.find('/') < 0:
                 continue
 
             try:
@@ -54,10 +55,7 @@ class Disk(zmeter.Metric):
 
         # end for
 
-        if self.__mounts != mounts:
-            stats['meta.mounts'] = ','.join(mounts)
-            self.__mounts = mounts
-
+        stats = self._updateMeta(stats, mounts)
 
         return stats
 
@@ -82,10 +80,20 @@ class Disk(zmeter.Metric):
 
             stats.update(stat)
 
-        if self.__mounts != mounts:
-            stats['meta.mounts'] = ','.join(mounts)
-            self.__mounts = mounts
+        stats = self._updateMeta(stats, mounts)
 
         return stats
 
-            
+    def _updateMeta(self, data, mounts):
+        if self.__mounts != mounts:
+            data['meta.mounts'] = ','.join(mounts)
+            self.__mounts = mounts
+
+        for k, v in data.items():
+            if k.find('total') < 0:
+                continue
+            if self.__meta.get(k) != v:
+                data['meta.' + k] = v
+                self.__meta[k] = v
+
+        return data
