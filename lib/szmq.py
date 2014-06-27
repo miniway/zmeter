@@ -262,11 +262,8 @@ class IoThread(threading.Thread):
             try:
                 data = fo.recv(65536)
             except socket.error, e:
-                if e.args[0] in [errno.ECONNRESET, errno.ECONNREFUSED]:
-                    self.logger.exception("Error at Read")
-                    data = None
-                else:
-                    raise
+                data = None
+                self.logger.exception("Error at Read")
 
             if not data:
                 self.logger.info("Disconnected at Read")

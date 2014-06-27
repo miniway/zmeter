@@ -33,7 +33,7 @@ class Mysql(zmeter.Metric):
         if conf.has_key('user'):
             args.extend(['-u', str(conf['user'])])
         if conf.has_key('password'):
-            args.extend(['-p', str(conf['password'])])
+            args.append('-p%s' % str(conf['password']))
 
         result = self.execute(*args)
         if not result:

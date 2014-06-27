@@ -61,7 +61,7 @@ class Mssql(zmeter.Metric):
                     ("Cursor Requests/sec", "cursor_rps"),
                     ("Active cursors", "cursors"),
                     ("Cursor memory usage", "cursor_memory"),
-                    ("Cursor worktable usage", "cursor worktable"),
+                    ("Cursor worktable usage", "cursor_worktable"),
                     ("Number of active cursor plans", "cursor_plans"),
                 ],
             "Broker Activation" : [
