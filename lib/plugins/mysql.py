@@ -44,8 +44,8 @@ class Mysql(zmeter.Metric):
             line = line.strip()
             if not line:
                 continue
-            kv = line.strip().split()
-            if len(kv) == 1:
+            kv = line.strip().split('\t')
+            if len(kv) != 2:
                 continue
             col, value = kv
             if col in Mysql.ACCEPTS:

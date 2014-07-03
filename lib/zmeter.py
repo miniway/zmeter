@@ -338,7 +338,7 @@ class Metric(object):
         else:
             close_fds = False
 
-        result = '' 
+        result = '',None 
         try:
             self._proc = subprocess.Popen(map(lambda s: str(s), args), 
                                     stdout=subprocess.PIPE, 
@@ -351,6 +351,10 @@ class Metric(object):
         except Exception, e:
             self._logger.exception(args[0])
             result = '',str(e) 
+
+        if result[0] and result[1] and result[1].startswith("Warning:"):
+            result = (result[0], None)
+
         return result
 
     def urlget(self, url, user = None, passwd = None):
