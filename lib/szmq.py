@@ -364,7 +364,7 @@ class IoThread(threading.Thread):
             self.__recv_bufs[s] = Queue.Queue()
         parsed = urlparse(s.endpoint)
         assert parsed[0] == 'tcp'
-        if sys.version_info < (2,6):
+        if sys.version_info < (2,6,1):
             netloc = parsed[2].replace('//','')
         else:
             netloc = parsed[1]
