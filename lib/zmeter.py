@@ -221,7 +221,10 @@ class ZMeter(object):
                     core[kv[0].strip()] = kv[1].strip()
         elif system == 'Windows':
             for cpu in get_wmi().InstancesOf("Win32_Processor"):
-                cores.extend(map(lambda n: {cpu.Name : n}, range(cpu.NumberOfCores)))
+                try:
+                    cores.extend(map(lambda n: {cpu.Name : n}, range(cpu.NumberOfCores)))
+                except AttributeError:
+                    cores.extend(map(lambda n: {cpu.Name : n}, range(1)))
         return cores
         
 
