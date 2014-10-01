@@ -332,7 +332,22 @@ class IoThread(threading.Thread):
                 else:
                     raise Exception("Send Error")
             else:
-                sent = fo.send(sock.handshake)
+                try:
+                    sent = fo.send(sock.handshake)
+                except socket.error, e:
+                    if e.args[0] in [errno.ECONNRESET, errno.ECONNREFUSED]:
+                       sent = -1
+                       self.logger.exception("Error at Sending handshake")
+                    else:
+                       raise
+                if sent < 0:
+                    self.logger.info("Disconnected at Sending handshake")
+                    self.__disconnect(fo)
+                    self.__disconnected.append(sock)
+                    self.__timeout = 5000
+                    self.__retry_at = time.time()
+                    return
+
                 if sent == len(sock.handshake):
                     self.logger.info("Sent Handshaking")
                     sock.connected = True
@@ -348,13 +363,11 @@ class IoThread(threading.Thread):
                     raise Exception("Connection Refused")
 
         if event & Poller.POLLERR:
-            if sock.connected:
-                self.logger.info("Already Connected")
-            else:
-                self.__disconnect(fo)
-                self.__disconnected.append(sock)
-                self.__timeout = 5000
-                self.__retry_at = time.time()
+            self.logger.info("POLLERR")
+            self.__disconnect(fo)
+            self.__disconnected.append(sock)
+            self.__timeout = 5000
+            self.__retry_at = time.time()
 
     def startConnect(self, s):
         self.logger.info("Start Connect " + s.endpoint)

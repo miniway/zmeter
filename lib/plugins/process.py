@@ -150,7 +150,7 @@ class Process(zmeter.Metric):
 
         for data in self._wmi.InstancesOf("Win32_PerfFormattedData_PerfProc_Process"):
             pid = data.IDProcess
-	    if pid == 0:
+            if pid == 0:
                 continue
             cmdline = data.Name or 'Idle'
             self.__cmdlines[pid] = cmdline
