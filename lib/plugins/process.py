@@ -26,9 +26,12 @@ class Process(zmeter.Metric):
         self.__prev = {}
         self.__cmdlines = {}
         self.__watches = {}
+        self.__top = 0
 
     def __initWatch(self, stats):
         watches = self._config.get('watch', {})
+
+        self.__top = int(watches.pop('top', 1024768))
     
         for k in watches.keys():
             stats['watch.%s.cpu' % k] = 0
@@ -97,13 +100,17 @@ class Process(zmeter.Metric):
         cpu_values = sorted(cpu_data, key=cpu_data.get, reverse=True)
         mem_values = sorted(mem_data, key=mem_data.get, reverse=True)
         top = []
+
         top_pids = []
-        for pid in cpu_values[:10]:
+
+        for pid in cpu_values[:self.__top]:
             top_pids.append(pid)
-        for pid in mem_values[:10]:
-            if pid in top_pids:
-                continue
-            top_pids.append(pid)
+
+        if self.__top < len(cpu_values):
+            for pid in mem_values[:self.__top]:
+                if pid in top_pids:
+                    continue
+                top_pids.append(pid)
 
         for pid in top_pids:
             cmdline = self.__prev[pid][1]
@@ -121,7 +128,7 @@ class Process(zmeter.Metric):
                 except KeyError:
                     pass
 
-        stats['snapshot.top10'] = json.dumps(top)
+        stats['snapshot.top'] = json.dumps(top)
         
     def __getCmdline(self, pid, name):
         cmdline = self.__cmdlines.get(pid)

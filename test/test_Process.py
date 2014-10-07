@@ -17,8 +17,9 @@ class test_Process(unittest.TestCase):
         info = zm.fetch('process')
         time.sleep(5)
         info = zm.fetch('process')
+        print info
 
-        self.assertTrue(info.has_key('snapshot.top10'))
+        self.assertTrue(info.has_key('snapshot.top'))
 
     def testWatchProcessinfo(self):
 
