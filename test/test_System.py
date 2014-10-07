@@ -19,3 +19,4 @@ class test_System(unittest.TestCase):
 
         self.assertTrue(info.has_key('meta.host'))
         self.assertTrue(info.has_key('meta.dist'))
+        self.assertTrue(info.has_key('meta.ip'))

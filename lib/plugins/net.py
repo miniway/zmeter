@@ -59,21 +59,22 @@ class Net(zmeter.Metric):
                 self.__prev[key] = value
             idx += 1
 
-        if self.__ifs != ifs:
-            stats['meta.ifs'] = ','.join(ifs)
-            self.__ifs = ifs
+        stats = self._updateMeta(stats, ifs)
 
         return stats
 
     def fetchWindows(self):
 
         stats = {}
+        ifs = []
         for data in self._wmi.InstancesOf("Win32_PerfFormattedData_Tcpip_NetworkInterface"):
             ifname = re.sub('_(\d+)', r'#\1', data.Name)
             try:
                 idx = self._nic.index(ifname)
             except ValueError:
                 continue
+
+            ifs.append(ifname)
             stat = {
                 '%d.in.bps'  % idx : long(data.BytesReceivedPerSec),
                 '%d.out.bps' % idx : long(data.BytesSentPerSec),
@@ -83,4 +84,14 @@ class Net(zmeter.Metric):
                 '%d.out.errs'% idx : long(data.PacketsOutboundErrors),
             }
             stats.update(stat)
+
+        stats = self._updateMeta(stats, ifs)
+
+        return stats
+
+    def _updateMeta(self, stats, ifs):
+        if self.checkLast() or self.__ifs != ifs:
+            stats['meta.ifs'] = ','.join(ifs)
+            self.__ifs = ifs
+
         return stats

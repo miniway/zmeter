@@ -304,8 +304,6 @@ class Metric(object):
 
     def afterFetch(self, result):
         release_wmi()
-        if result:
-            self._last_updated = time.time()
         self._spent = time.time() - self._now
         self._proc = None
 
@@ -373,6 +371,13 @@ class Metric(object):
         else:
             return runner.result()
         
+    def checkLast(self, limit = 86400):
+        if self._last_updated and self._last_updated > self._now - limit:
+            return False
+
+        self._last_updated = time.time()
+        return True
+
     def _urlget(self, url, user = None, passwd = None):
         headers = {
             'User-Agent'    : 'ZAgent',

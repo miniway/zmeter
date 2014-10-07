@@ -16,5 +16,5 @@ class test_MemInfo(unittest.TestCase):
         info = zm.fetch('mem')
         
         self.assertTrue(info.has_key('total'))
-        self.assertEquals(info.get('used'), info.get('total') - info.get('free'))
+        self.assertTrue(info.get('used') <= info.get('total') - info.get('free'))
 

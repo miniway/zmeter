@@ -85,7 +85,7 @@ class Disk(zmeter.Metric):
         return stats
 
     def _updateMeta(self, data, mounts):
-        if self.__mounts != mounts:
+        if self.checkLast() or self.__mounts != mounts:
             data['meta.mounts'] = ','.join(mounts)
             self.__mounts = mounts
 

@@ -9,14 +9,9 @@ class System(zmeter.Metric):
     def __init__(self):
         super(System, self).__init__()
 
-    def __checkLast(self):
-        if self._last_updated and self._last_updated > self._now - 86400:
-            return False
-        return True
-        
     def fetch(self):
 
-        if not self.__checkLast():
+        if not self.checkLast():
             return
 
         data = {
@@ -25,7 +20,8 @@ class System(zmeter.Metric):
             'processor'   : platform.processor(), 
             'system'      : platform.system(),
             'release'     : platform.release(),
-            'cores'       : self._cores
+            'cores'       : self._cores,
+            'ip'	  : self._ip
         }
 
         if data['system'] == 'Linux':
@@ -38,6 +34,3 @@ class System(zmeter.Metric):
             stat['meta.%s' % k] = v
 
         return stat
-
-        
-

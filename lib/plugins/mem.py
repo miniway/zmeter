@@ -61,7 +61,7 @@ class Mem(zmeter.Metric):
         return stats
 
     def _updateMeta(self, data):
-        if self.__mem.get('meta.total') != data['total']: 
+        if self.checkLast() or self.__mem.get('meta.total') != data['total']: 
             data['meta.total'] = data['total']
             self.__mem['meta.total'] = data['total']
 

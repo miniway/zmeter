@@ -60,9 +60,7 @@ class IoStat(zmeter.Metric):
                 stats[name] = round(value,2)
             idx += 1
 
-        if self.__devices != devices:
-            stats['meta.devs'] = ','.join(devices)
-            self.__devices = devices
+        stats = self._updateMeta(stats, devices)
 
         return stats
     
@@ -94,8 +92,13 @@ class IoStat(zmeter.Metric):
             }
             stats.update(stat)
 
-        if self.__devices != devices:
+        stats = self._updateMeta(stats, devices)
+            
+        return stats
+
+    def _updateMeta(self, stats, devices):
+        if self.checkLast() or self.__devices != devices:
             stats['meta.devs'] = ','.join(devices)
             self.__devices = devices
-            
+
         return stats
