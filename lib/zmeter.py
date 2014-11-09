@@ -146,7 +146,7 @@ class ZMeter(object):
                 runner.start()
                 runners.append((name, runner))
             start = time.time()
-            while runner:
+            while runners:
                 alive = []
                 for name, runner in runners:
                     if runner.isAlive():
@@ -160,7 +160,7 @@ class ZMeter(object):
                         stat = runner.result()
                         if stat:
                             data[name] = stat
-                runner = alive
+                runners = alive
 
             frames = self.__serializer.feed(data, params)
         except Exception, e:
