@@ -14,7 +14,9 @@ import array
 import urllib2
 import base64
 import string
+import thread
 import threading
+import Queue
 
 class ZMeter(object):
 
@@ -28,6 +30,7 @@ class ZMeter(object):
                         config = {},
                         identity = None,
                         hwm = 10000):
+        self.__pool = ThreadPool()
         self.__serializer = serializer or JsonSerializer()
         self.__config = config
 
@@ -142,26 +145,19 @@ class ZMeter(object):
             runners = []
             data = {}
             for name, inst in self.__plugins.items():
-                runner = ThreadRunner(self.fetch, name, stop=inst.stop)
-                runner.start()
+                runner = self.__pool.get(name, self.fetch, name, stop=inst.stop)
+                runner.resume()
                 runners.append((name, runner))
             start = time.time()
-            while runners:
-                alive = []
-                for name, runner in runners:
-                    if runner.isAlive():
-                        if time.time() - start >= 5.0:
-                            runner.stop()
-                            self.__logger.error("Timeout at Fetch %s", name)
-                        else:
-                            runner.join(0.5)
-                            alive.append((name, runner))
-                    else:
-                        stat = runner.result()
-                        if stat:
-                            data[name] = stat
-                runners = alive
-
+            for name, runner in runners:
+                try:
+                    timeout = max(5.0 + start - time.time(), 0.0)
+                    stat = runner.result(timeout)
+                    if stat:
+                        data[name] = stat
+                except Queue.Empty:
+                    runner.stop()
+                    self.__logger.error("Timeout at Fetch %s", name)
             frames = self.__serializer.feed(data, params)
         except Exception, e:
             self.__logger.exception("Exception at 'sendall'")
@@ -183,10 +179,11 @@ class ZMeter(object):
         self.close()
         
     def platform(self):
-        cores = self.__parseCpuInfo()
+        wmi = get_wmi(True)
+        cores = self.__parseCpuInfo(wmi)
         system = platform.system()
         pf = {
-            'ip'            : get_ips()[0],
+            'ip'            : get_ips(wmi)[0],
             'system'        : system,
             'cores'         : len(cores)
         }
@@ -197,7 +194,7 @@ class ZMeter(object):
             })
         elif system == 'Windows':
             nic = []
-            for inf in get_wmi().ExecQuery(
+            for inf in wmi.ExecQuery(
                 "select * from Win32_NetworkAdapterConfiguration where IPEnabled=1"):
                 nic.append(inf.Description)
             pf.update({
@@ -206,7 +203,7 @@ class ZMeter(object):
 
         return pf
 
-    def __parseCpuInfo(self):
+    def __parseCpuInfo(self, wmi = None):
 
         system = platform.system()
         cores = []
@@ -220,7 +217,7 @@ class ZMeter(object):
                 else:
                     core[kv[0].strip()] = kv[1].strip()
         elif system == 'Windows':
-            for cpu in get_wmi().InstancesOf("Win32_Processor"):
+            for cpu in wmi.InstancesOf("Win32_Processor"):
                 try:
                     cores.extend(map(lambda n: {cpu.Name : n}, range(cpu.NumberOfCores)))
                 except AttributeError:
@@ -275,6 +272,63 @@ class ThreadRunner(threading.Thread):
     def timeout(self):
         return self.isAlive()
 
+class ThreadPool(object):
+    def __init__(self):
+        self.__pool = {}
+
+    def get(self, name, func, *args, **kwargs):
+        th = self.__pool.get(name)
+        if th is None or th.stopped():
+            th = ThreadPoolRunner(name, func, *args, **kwargs)
+            self.__pool[name] = th
+            th.start()
+
+        return th
+
+
+class ThreadPoolRunner(threading.Thread):
+    def __init__(self, name, func, *args, **kwargs):
+        super(ThreadPoolRunner, self).__init__()
+        self.__name = name
+        self.__func = func
+        self.__args = args
+        self.__stop = kwargs.pop('stop', None)
+        self.__kwargs = kwargs
+        self.__stopped = False
+        self.__running = False
+        self.__queue = Queue.Queue()
+        self.__result = Queue.Queue()
+        
+    def run(self):
+        WinInitialize()
+        while not self.__stopped:
+            self.__queue.get(True)
+            self.__running = True
+            result = self.__func(*self.__args, **self.__kwargs)
+            self.__result.put(result)
+            self.__running = False
+        WinUninitialize()
+
+    def resume(self):
+        self.__queue.put("job")
+
+    def stop(self):
+        self.__stopped = True
+        if self.__stop:
+            self.__stop()
+
+    def result(self, timeout = None):
+        return self.__result.get(True, timeout)
+
+    def timeout(self):
+        return self.isAlive()
+
+    def stopped(self):
+        return self.__stopped
+
+    def running(self):
+        return self.__running
+
 class Metric(object):
 
     def __init__(self):
@@ -292,18 +346,21 @@ class Metric(object):
         self._shared = {}
         self._spent = 0L
         self._proc = None
-        
+        self._tid = None
+        self._wmi = None
 
     def beforeFetch(self):
+        tid = thread.get_ident()
+        if not self._tid:
+            self._tid = tid
+        if self._wmi is None or self._tid != tid:
+            self._wmi = get_wmi()
         now = time.time()
         if self._now:
             self._elapsed = now - self._now
         self._now = now
-        self._wmi = get_wmi()
-
 
     def afterFetch(self, result):
-        release_wmi()
         self._spent = time.time() - self._now
         self._proc = None
 
@@ -322,6 +379,7 @@ class Metric(object):
         else:
             return out
 
+    # deprecated
     def executeAsync(self, *args):
         runner = ThreadRunner(self._execute, *args)
         runner.start()
@@ -418,22 +476,28 @@ class StdoutLogger(object):
     warn = write
     error = write
 
-def get_wmi():
+def get_wmi(cominit = False):
+    if cominit:
+        WinInitialize()
     if platform.system() == 'Windows':
-        import pythoncom
         import win32com.client
-        pythoncom.CoInitialize()
         return win32com.client.GetObject("winmgmts:")
 
-def release_wmi():
+def WinInitialize():
+    if platform.system() == 'Windows':
+        import pythoncom
+        pythoncom.CoInitialize()
+
+
+def WinUninitialize():
     if platform.system() == 'Windows':
         import pythoncom
         pythoncom.CoUninitialize()
         
-def get_ips():
-    return [ip for name, ip in get_interfaces() if name != 'lo' ]
+def get_ips(wmi = None):
+    return [ip for name, ip in get_interfaces(wmi) if name != 'lo' ]
 
-def get_interfaces():
+def get_interfaces(wmi = None):
     def format_ip(addr):
         return str(ord(addr[0])) + '.' + \
                str(ord(addr[1])) + '.' + \
@@ -465,7 +529,9 @@ def get_interfaces():
         return lst
     elif system == 'Windows':
         lst = []
-        for inf in get_wmi().ExecQuery(
+        if wmi is None:
+            wmi = get_wmi(True)
+        for inf in wmi.ExecQuery(
                 "select * from Win32_NetworkAdapterConfiguration where IPEnabled=1"):
             lst.append((inf.Description, inf.IPAddress[0]))
         return lst
