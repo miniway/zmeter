@@ -36,6 +36,7 @@ class ZMeter(object):
 
         self.__plugins = {}
         self.__closed = False
+        self.__timeout = config.get('_timeout', 5.0)
 
         self.loadLogger(logger)
         self.loadPlugins()
@@ -120,7 +121,7 @@ class ZMeter(object):
             result = method()
         except Exception, e:
             self.__logger.exception("Exception at %s 'fetch'" % name)
-            return
+            result = e
         inst.afterFetch(result)
 
         return result
@@ -151,8 +152,11 @@ class ZMeter(object):
             start = time.time()
             for name, runner in runners:
                 try:
-                    timeout = max(5.0 + start - time.time(), 0.0)
+                    timeout = max(self.__timeout + start - time.time(), 0.0)
                     stat = runner.result(timeout)
+                    if isinstance(stat, Exception):
+                        runner.stop()
+                        continue
                     if stat:
                         data[name] = stat
                 except Queue.Empty:
@@ -301,19 +305,24 @@ class ThreadPoolRunner(threading.Thread):
         
     def run(self):
         WinInitialize()
-        while not self.__stopped:
-            self.__queue.get(True)
-            self.__running = True
-            result = self.__func(*self.__args, **self.__kwargs)
-            self.__result.put(result)
-            self.__running = False
-        WinUninitialize()
+        try:
+            while True:
+                self.__queue.get(True)
+                if self.__stopped:
+                    break
+                self.__running = True
+                result = self.__func(*self.__args, **self.__kwargs)
+                self.__result.put(result)
+                self.__running = False
+        finally:
+            WinUninitialize()
 
     def resume(self):
         self.__queue.put("job")
 
     def stop(self):
         self.__stopped = True
+        self.__queue.put(None)
         if self.__stop:
             self.__stop()
 
