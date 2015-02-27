@@ -143,25 +143,11 @@ class ZMeter(object):
 
     def sendall(self, params = {}):
         try:
-            runners = []
-            data = {}
-            for name, inst in self.__plugins.items():
-                runner = self.__pool.get(name, self.fetch, name, stop=inst.stop)
-                runner.resume()
-                runners.append((name, runner))
-            start = time.time()
-            for name, runner in runners:
-                try:
-                    timeout = max(self.__timeout + start - time.time(), 0.0)
-                    stat = runner.result(timeout)
-                    if isinstance(stat, Exception):
-                        runner.stop()
-                        continue
-                    if stat:
-                        data[name] = stat
-                except Queue.Empty:
-                    runner.stop()
-                    self.__logger.error("Timeout at Fetch %s", name)
+            system = self._platform['system']
+            if system == 'Linux':
+                data = fetchAllThreaded()
+            else:
+                data = fetchAll()
             frames = self.__serializer.feed(data, params)
         except Exception, e:
             self.__logger.exception("Exception at 'sendall'")
@@ -170,6 +156,37 @@ class ZMeter(object):
         for frame in frames[:-1]:
             self.__inbox.send(frame, zmq.SNDMORE)
         self.__inbox.send(frames[-1])
+
+    def fetchAllThreaded(self, params = {}):
+        runners = []
+        data = {}
+        for name, inst in self.__plugins.items():
+            runner = self.__pool.get(name, self.fetch, name, stop=inst.stop)
+            runner.resume()
+            runners.append((name, runner))
+        start = time.time()
+        for name, runner in runners:
+            try:
+                timeout = max(self.__timeout + start - time.time(), 0.0)
+                stat = runner.result(timeout)
+                if isinstance(stat, Exception):
+                    runner.stop()
+                    continue
+                if stat:
+                    data[name] = stat
+            except Queue.Empty:
+                runner.stop()
+                self.__logger.error("Timeout at Fetch %s", name)
+
+        return data
+
+    def fetchAll(self, params = {}):
+        runners = []
+        data = {}
+        for name, inst in self.__plugins.items():
+            data[name] = self.fetch(name)
+
+        return data
 
     def close(self):
         # Synchronize
