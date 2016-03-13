@@ -145,9 +145,9 @@ class ZMeter(object):
         try:
             system = self._platform['system']
             if system == 'Linux':
-                data = fetchAllThreaded()
+                data = self.fetchAllThreaded()
             else:
-                data = fetchAll()
+                data = self.fetchAll()
             frames = self.__serializer.feed(data, params)
         except Exception, e:
             self.__logger.exception("Exception at 'sendall'")
